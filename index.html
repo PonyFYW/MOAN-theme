@@ -7,10 +7,22 @@
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #121510; }
   #game { position: fixed; left: 0; top: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #boot-loader { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; background: #121510; }
+  #boot-loader .seal { padding: 10px 14px; border: 3px solid #b04038; border-radius: 10px;
+    color: #b04038; font: 700 30px/1.1 serif; letter-spacing: 2px; writing-mode: vertical-rl; }
+  #boot-loader .txt { color: #8a8578; font: 14px/1.6 sans-serif; letter-spacing: 4px;
+    animation: bootPulse 1.6s ease-in-out infinite; }
+  @keyframes bootPulse { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- 加载占位：JS（含内联资产）流完前显示，main.js 启动后移除（慢网不再黑屏干等） -->
+<div id="boot-loader">
+  <div class="seal">墨案</div>
+  <div class="txt">缉凶现场布置中…</div>
+</div>
 <script src="./js/wx-compat.js"></script>
 <script src="./js/bundle.js"></script>
 <script src="./js/library/themes.js"></script>

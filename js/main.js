@@ -64,6 +64,10 @@
   var manager = sceneMod.createSceneManager(canvas, ctx, { width: size.W, height: size.H, L: L });
   manager.replace(homeMod.createHomeScene(manager));
 
+  /* 启动完成：撤下加载占位（JS 全部流完才会走到这） */
+  var loader = document.getElementById('boot-loader');
+  if (loader) loader.parentNode.removeChild(loader);
+
   /* 尺寸变化（旋转 / 窗口调整）：重算画布并重建场景 */
   if (window.wx && window.wx.onWindowResize) {
     window.wx.onWindowResize(function () {
