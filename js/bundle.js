@@ -3540,9 +3540,12 @@ function createPlayScene(manager, opts) {
         if (svg) drawSVG(c, svg, x + cell * 0.12, y + cell * 0.12, cell * 0.76, cell * 0.76);
       }
     });
-    // 房间名最后画：压在物件之上，不被牌匾/桌椅挡住
-    // （每个房间最底行居中；贴底边收进区域内。
-    // 断开区域（如长廊的左右两条腿）：取最底行的最长连续段居中，防止标签落进别的房间）
+  }
+
+  /* 区域名标签（动态顶层绘制：压在 token/批注/进度环之上，参照月球主题 room-overlay 高层）。
+   * 局部坐标 0..boardSide；每个房间最底行居中、贴底边收进区域内；
+   * 断开区域取最底行的最长连续段居中，防止标签落进别的房间。 */
+  function drawRoomLabels(c) {
     c.fillStyle = 'rgba(20,20,20,0.78)';
     c.font = `bold ${Math.max(10, cell * 0.28)}px serif`;
     c.textAlign = 'center';
@@ -3648,8 +3651,8 @@ function createPlayScene(manager, opts) {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         noted.slice(0, 6).forEach((p, k) => {
-          // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）
-          const fs = Math.max(11, cell * 0.3);
+          // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）；v3.1 字号放大（简称标注易读）
+          const fs = Math.max(13, cell * 0.34);
           const tx = x + 2 + (k % 3) * cell * 0.32;
           const ty = y + 2 + Math.floor(k / 3) * cell * 0.3;
           ctx.font = `bold ${fs}px sans-serif`;
@@ -3668,16 +3671,21 @@ function createPlayScene(manager, opts) {
       const r = M.row(holdCell, n), c = M.col(holdCell, n);
       const cx = boardX + (c + 0.5) * cell, cy = boardY + (r + 0.5) * cell;
       ctx.strokeStyle = board.people[selected].color || '#b84038';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6;   // 长按进度环：v3.1 加粗（闭合圆环更醒目）
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.arc(cx, cy, cell * 0.42, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
       ctx.stroke();
       manager.invalidate(); // 动画期间持续重绘
     }
-    // 国风坐标：横轴在棋盘上方，纵轴在左
+    // 区域名最上层：压在 token/批注/进度环之上（参照月球主题 room-overlay 高层）
+    ctx.save();
+    ctx.translate(boardX, boardY);
+    drawRoomLabels(ctx);
+    ctx.restore();
+    // 国风坐标：横轴在棋盘上方，纵轴在左（v3.1 放大字号，小屏易读）
     ctx.fillStyle = t.fg;
-    ctx.font = 'bold 11px serif';
+    ctx.font = 'bold 14px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
@@ -3791,13 +3799,13 @@ function createPlayScene(manager, opts) {
       drawSVG(ctx, L.Art.avatarSVG(p.avatar), x + cell * 0.04, y + cell * 0.04, cell * 0.92, cell * 0.92);
     }
     ctx.fillStyle = 'rgba(245,238,218,0.92)';
-    roundRect(ctx, x + 2, y + 2, 15, 13, 3);
+    roundRect(ctx, x + 2, y + 2, 17, 14, 3);
     ctx.fill();
     ctx.fillStyle = '#333';
-    ctx.font = '9px sans-serif';
+    ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.short, x + 9.5, y + 8.5);
+    ctx.fillText(p.short, x + 10.5, y + 9);
   }
 
   /* 工笔头像（webp）优先，未加载完成回退参数化 SVG */
@@ -3874,19 +3882,20 @@ function createPlayScene(manager, opts) {
       });
       y += ch + 6;
     }
-    // 逐人卡：头像（含简称徽章）+ 姓名/性别 + 证词；整卡点按选人
+    // 逐人卡（参照月球主题排布：头像放大居上，姓名/性别同行，证词在头像下方通栏）；整卡点按选人
     board.people.forEach(p => {
       const pairs = [];
       board.clues.forEach((clue, i) => {
         if (!GENERAL_TYPES.has(clue.type) && clue.p === p.id) pairs.push([clue, i]);
       });
       if (!pairs.length) return;
+      const AV = 44;                            // 头像边长（原 28，月球主题同款放大）
       ctx.font = '12px sans-serif';
       const isPlaced = Object.values(placed).includes(p.id);
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
       const lines = [];
-      wrapText(ctx, text, cw - 24 - 42).forEach(s => lines.push(s));
-      const ch = Math.max(46, 22 + lines.length * 17 + 8);
+      wrapText(ctx, text, cw - 28).forEach(s => lines.push(s));
+      const ch = Math.max(66, 10 + AV + 8 + lines.length * 17 + 8);
       // 已放置者卡片底罩灰作区分（深浅主题均可见；透明度调和法在浅色主题下会隐形）；
       // 头像/姓名/性别/证词保持全亮
       ctx.fillStyle = '#f5eeda';
@@ -3901,34 +3910,33 @@ function createPlayScene(manager, opts) {
       ctx.lineWidth = p.id === selected ? 2 : 1.5;
       roundRect(ctx, 8, y, cw, ch, 10);
       ctx.stroke();
-      // 头像 + 简称徽章
-      const avY = y + (ch - 28) / 2;
-      drawPortrait(ctx, p, 14, avY, 28, 28);
+      // 头像（大）+ 右下角简称徽章
+      drawPortrait(ctx, p, 14, y + 10, AV, AV);
       ctx.fillStyle = 'rgba(245,238,218,0.95)';
-      roundRect(ctx, 29, avY + 17, 13, 11, 3);
+      roundRect(ctx, 14 + AV - 16, y + 10 + AV - 15, 16, 13, 3);
       ctx.fill();
       ctx.fillStyle = '#333';
-      ctx.font = '8px sans-serif';
+      ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(p.short, 35.5, avY + 23);
-      // 姓名 + 简称 + 性别（被害者标明身份；简称对应棋盘批注字母）
+      ctx.fillText(p.short, 14 + AV - 8, y + 10 + AV - 8.5);
+      // 姓名 + 简称 + 性别：与头像同行、垂直居中（被害者标明身份；简称对应棋盘批注字母）
+      const nameX = 14 + AV + 10, nameY = y + 10 + AV / 2;
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = p.id === selected ? '#b84038' : '#6b5f3a';
-      ctx.font = 'bold 12px sans-serif';
-      const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
-      ctx.fillText(namePart, 50, y + 7);
-      // 性别符号单独绘制：部分机型符号字体与中文基线不齐（真机曾见下沉错位），改 middle 基线对齐行中
       ctx.textBaseline = 'middle';
-      ctx.fillText(p.gender === 'F' ? '♀' : '♂', 50 + ctx.measureText(namePart).width + 5, y + 7 + 6.5);
+      ctx.fillStyle = p.id === selected ? '#b84038' : '#6b5f3a';
+      ctx.font = 'bold 13px sans-serif';
+      const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
+      ctx.fillText(namePart, nameX, nameY);
+      // 性别符号单独 middle 基线绘制（部分机型符号字体与中文基线不齐，真机曾见下沉错位）
+      ctx.fillText(p.gender === 'F' ? '♀' : '♂', nameX + ctx.measureText(namePart).width + 5, nameY);
+      // 证词：头像下方通栏
+      let ly = y + 10 + AV + 8;
       ctx.textBaseline = 'top';
-      // 证词
-      let ly = y + 24;
       lines.forEach(s => {
         ctx.fillStyle = '#2a2620';
         ctx.font = '12px sans-serif';
-        ctx.fillText(s, 50, ly);
+        ctx.fillText(s, 14, ly);
         ly += 17;
       });
       zones.clueCards.push({ x: 8, y, w: cw, h: ch, p: p.id });
