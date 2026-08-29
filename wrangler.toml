@@ -1,0 +1,6 @@
+# Cloudflare Pages/Workers 静态站配置（build-web.mjs 产出，勿手改）
+name = "moan-theme"
+compatibility_date = "2026-08-28"
+
+[assets]
+directory = "."
