@@ -3029,7 +3029,7 @@ const HOWTO = `真凶必曾与死者独处一室（同处一屋，且屋内再�
 · 点按格子：朱笔批注（显示单字简称）
 · 长按格子：将选中之人置于此处
 · 按住拖动：连续批注
-· ✕ 排除：墨笔打叉，标记此处断无可能
+· ✕ 排除：墨笔打叉，标记此处断无可能（PC 端可直接右键格子打/撤叉）
 · ⌫ 擦除：点按清单一格，长按清空全盘
 · ↩ 撤回　💡 提点（推理链逐步揭示）
 · 专家/大师/传奇档不设提点，全凭推理
@@ -3130,7 +3130,7 @@ function createPlayScene(manager, opts) {
       toolW = W;
       if (board) {
         const gl = generalLines().length;
-        generalH = gl ? gl * 17 + 30 : 0;   // 无通用线索的案不收通用卡高度
+        generalH = gl ? gl * 18 + 30 : 0;   // 无通用线索的案不收通用卡高度
       }
       boardY = TOP_SAFE + HEADER_BAND + generalH + 8 + COORD;  // 横轴在棋盘上方（留 COORD）
       clueX = boardX - COORD - 8;             // 卡片内缩 8 → 线索卡左右缘含纵轴刻度与棋盘对齐
@@ -3189,9 +3189,9 @@ function createPlayScene(manager, opts) {
     try { wx.vibrateShort({ type: 'light' }); } catch (e) { /* 无振动 */ }
   }
 
-  function toast(msg) {
+  function toast(msg, ms) {
     toastMsg = msg;
-    toastUntil = Date.now() + 2200;
+    toastUntil = Date.now() + (ms || 2200);
     manager.invalidate();
   }
 
@@ -3458,6 +3458,12 @@ function createPlayScene(manager, opts) {
     if (done) showReplay = true;   // 已破案：进入给「再玩一次」选择
     selected = b.people.find(p => !p.isVictim).id;
     ready = true;
+    // 首次进棋盘的情境提示（一次性，settings 落盘；对齐"情境提示优于说明书墙"）
+    if (!settings.hintSeen && !done) {
+      toast('点按=批注 · 长按=放置 · ✕=排除 · ⌫=擦除', 4500);
+      settings.hintSeen = true;
+      L.Storage.saveSettings(settings);
+    }
     if (!done) timerOn = true;
     timerInt = setInterval(() => {
       if (timerOn && !done) {
@@ -3838,9 +3844,9 @@ function createPlayScene(manager, opts) {
     let ly = y + 26;
     lines.forEach(wl => {
       ctx.fillStyle = '#2a2620';
-      ctx.font = '12px sans-serif';
+      ctx.font = '13px sans-serif';   // v3.2 证词字号放大（最高频阅读文本）
       ctx.fillText(wl.text, gx + 10, ly);
-      ly += 17;
+      ly += 18;
     });
   }
 
@@ -3860,7 +3866,7 @@ function createPlayScene(manager, opts) {
     // 横屏：通用线索卡并入列表首位
     if (LAND) {
       const lines = generalLines();
-      const ch = lines.length * 17 + 30;
+      const ch = lines.length * 18 + 30;
       ctx.fillStyle = '#e9ddbb';               // 通用线索用深一档的纸色，与角色卡区分
       roundRect(ctx, 8, y, cw, ch, 10);
       ctx.fill();
@@ -3876,9 +3882,9 @@ function createPlayScene(manager, opts) {
       let gy = y + 26;
       lines.forEach(wl => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = '12px sans-serif';
+        ctx.font = '13px sans-serif';   // v3.2 证词字号放大（最高频阅读文本）
         ctx.fillText(wl.text, 18, gy);
-        gy += 17;
+        gy += 18;
       });
       y += ch + 6;
     }
@@ -3890,12 +3896,12 @@ function createPlayScene(manager, opts) {
       });
       if (!pairs.length) return;
       const AV = 44;                            // 头像边长（原 28，月球主题同款放大）
-      ctx.font = '12px sans-serif';
+      ctx.font = '13px sans-serif';
       const isPlaced = Object.values(placed).includes(p.id);
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
       const lines = [];
       wrapText(ctx, text, cw - 28).forEach(s => lines.push(s));
-      const ch = Math.max(66, 10 + AV + 8 + lines.length * 17 + 8);
+      const ch = Math.max(66, 10 + AV + 8 + lines.length * 18 + 8);
       // 已放置者卡片底罩灰作区分（深浅主题均可见；透明度调和法在浅色主题下会隐形）；
       // 头像/姓名/性别/证词保持全亮
       ctx.fillStyle = '#f5eeda';
@@ -3930,14 +3936,14 @@ function createPlayScene(manager, opts) {
       ctx.fillText(namePart, nameX, nameY);
       // 性别符号单独 middle 基线绘制（部分机型符号字体与中文基线不齐，真机曾见下沉错位）
       ctx.fillText(p.gender === 'F' ? '♀' : '♂', nameX + ctx.measureText(namePart).width + 5, nameY);
-      // 证词：头像下方通栏
+      // 证词：头像下方通栏（v3.2 字号放大）
       let ly = y + 10 + AV + 8;
       ctx.textBaseline = 'top';
       lines.forEach(s => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = '12px sans-serif';
+        ctx.font = '13px sans-serif';
         ctx.fillText(s, 14, ly);
-        ly += 17;
+        ly += 18;
       });
       zones.clueCards.push({ x: 8, y, w: cw, h: ch, p: p.id });
       y += ch + 6;
@@ -4204,6 +4210,15 @@ function createPlayScene(manager, opts) {
   /* ================================================================
      场景接口
      ================================================================ */
+  // PC 端：右键 = 对格打/撤排除叉（不切当前工具；单槽注册，换场景自动覆盖）
+  if (typeof wx !== 'undefined' && wx.onContextMenu) {
+    wx.onContextMenu(e => {
+      const t0 = e.touches && e.touches[0];
+      if (!t0 || !ready) return;
+      const i = cellAt(t0.clientX, t0.clientY);
+      if (i >= 0) { toggleMark(i, 'x'); vibrate(); }
+    });
+  }
   const scene = {
     zones,
 

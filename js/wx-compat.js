@@ -32,6 +32,16 @@
     canvas.addEventListener('touchmove', function (e) { e.preventDefault(); fire('move', toWxTouch(e, canvas)); }, opts);
     canvas.addEventListener('touchend', function (e) { e.preventDefault(); fire('end', toWxTouch(e, canvas)); }, opts);
     canvas.addEventListener('touchcancel', function (e) { fire('cancel', toWxTouch(e, canvas)); }, opts);
+    /* PC 右键 = 排除叉（场景经 wx.onContextMenu 单槽注册，新场景覆盖旧场景，防泄漏）。
+     * contextmenu 是 MouseEvent（无 touches 列表），须直接用事件坐标换算。 */
+    canvas.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      if (cbs.context) {
+        var rect = canvas.getBoundingClientRect();
+        var t = { clientX: e.clientX - rect.left, clientY: e.clientY - rect.top };
+        cbs.context({ touches: [t], changedTouches: [t] });
+      }
+    });
 
     /* 鼠标回退：PC 浏览器游玩（PC 模拟器本身会把鼠标映射为 touch，不会双触发） */
     var down = false;
@@ -59,6 +69,8 @@
     onTouchMove: function (fn) { cbs.move.push(fn); },
     onTouchEnd: function (fn) { cbs.end.push(fn); },
     onTouchCancel: function (fn) { cbs.cancel.push(fn); },
+    /* 右键（contextmenu）：单槽回调，play 场景注册"右键=排除叉" */
+    onContextMenu: function (fn) { cbs.context = fn; },
     /* 窗口尺寸变化（旋转/拖窗口）：回报画布 CSS 尺寸（已扣除安全区） */
     onWindowResize: function (fn) {
       window.addEventListener('resize', function () {
