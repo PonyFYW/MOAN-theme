@@ -3286,8 +3286,8 @@ function createPlayScene(manager, opts) {
   }
   function relayout() {
     if (LAND) {
-      // 横屏：左线索列（含通用卡）/ 中棋盘 / 最右侧竖排功能轨
-      const RAIL_W = 64;
+      // 横屏：左线索列（含通用卡）/ 中棋盘 / 最右侧竖排功能轨（Fitts：主操作区加宽）
+      const RAIL_W = 88;
       boardSide = Math.min(H - HDR_TOP - HEADER_BAND - COORD - 12, W * 0.6);
       clueX = 8;
       clueW = Math.min(300, Math.max(220, W * 0.32));
@@ -3730,7 +3730,7 @@ function createPlayScene(manager, opts) {
    * 断开区域取最底行的最长连续段居中，防止标签落进别的房间。 */
   function drawRoomLabels(c) {
     c.fillStyle = 'rgba(20,20,20,0.78)';
-    c.font = `bold ${Math.max(10, cell * 0.28)}px ${FONTS.kai}`;   // 区域名楷体（公堂视觉）
+    c.font = `bold ${Math.max(10, cell * 0.22)}px ${FONTS.kai}`;   // 区域名楷体（装饰字级压过功能字级的问题修正）
     c.textAlign = 'center';
     c.textBaseline = 'bottom';
     board.rooms.forEach(room => {
@@ -3756,7 +3756,7 @@ function createPlayScene(manager, opts) {
       }
       // 白色描边：深色房间名在任何地板上都醒目
       const lx = (bestS + bestLen / 2) * cell, ly = (rMax + 1) * cell - 1;
-      c.lineWidth = Math.max(2, cell * 0.05);
+      c.lineWidth = Math.max(2, cell * 0.045);
       c.lineJoin = 'round';
       c.strokeStyle = 'rgba(250,248,240,0.92)';
       c.strokeText(room.name, lx, ly);
@@ -3781,9 +3781,10 @@ function createPlayScene(manager, opts) {
 
   function drawBoard(ctx, t) {
     if (cacheVer !== data.imageVersion()) rebuildBoardCache();
-    // 装裱框（公堂视觉：深色绫绢 + 金线内衬；仅横屏大画布加，竖屏保持满幅）
+    // 装裱框（公堂视觉：深色绫绢 + 金线内衬；仅横屏大画布加。
+    // 框垫=坐标高+14：坐标落在金线与板缘之间的留白带内，绝不骑线）
     if (LAND) {
-      const fp = 22;
+      const fp = COORD + 14;
       ctx.fillStyle = '#241d12';
       roundRect(ctx, boardX - fp, boardY - fp, boardSide + fp * 2, boardSide + fp * 2, 6);
       ctx.fill();
@@ -3850,7 +3851,7 @@ function createPlayScene(manager, opts) {
         ctx.textBaseline = 'top';
         noted.slice(0, 6).forEach((p, k) => {
           // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）；v3.1 字号放大（简称标注易读）
-          const fs = Math.max(13, cell * 0.34);
+          const fs = Math.max(12, cell * 0.28);
           const tx = x + 2 + (k % 3) * cell * 0.32;
           const ty = y + 2 + Math.floor(k / 3) * cell * 0.3;
           ctx.font = `bold ${fs}px sans-serif`;
@@ -3902,40 +3903,40 @@ function createPlayScene(manager, opts) {
     ];
     if (!HINT_OFF) tools.push({ key: 'hint', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
     if (LAND) {
-      // 横屏：最右侧竖排功能轨（文房圆牌 + 自绘图标）
+      // 横屏：最右侧竖排功能轨（Fitts 放大：22px 圆牌 + 12px 楷 + 76px 呈堂印）
       let y = toolY;
       tools.forEach(tb => {
-        const rect = { x: toolX, y, w: toolW, h: 44 };
+        const rect = { x: toolX, y, w: toolW, h: 54 };
         const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
         ctx.fillStyle = active ? 'rgba(177,58,48,0.18)' : 'rgba(242,236,221,0.10)';
-        ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + 17, 17, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + 21, 21, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = active ? '#b13a30' : 'rgba(214,182,92,0.55)';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.4;
         ctx.stroke();
-        drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + 17, 18, active ? '#b13a30' : t.fg);
-        ctx.font = `10px ${FONTS.kai}`;
+        drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + 21, 24, active ? '#b13a30' : t.fg);
+        ctx.font = `12px ${FONTS.kai}`;
         ctx.fillStyle = active ? '#b13a30' : t.muted;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + 37);
+        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + 46);
         zones[tb.zone] = rect;
-        y += 48;
+        y += 58;
       });
       // 自动排除开关（小印 + 朱叉）
-      const ax = { x: toolX, y, w: toolW, h: 44 };
+      const ax = { x: toolX, y, w: toolW, h: 54 };
       ctx.fillStyle = settings.autoX ? 'rgba(194,162,74,0.22)' : 'rgba(242,236,221,0.10)';
-      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + 22, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + 27, 21, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = settings.autoX ? '#c2a24a' : 'rgba(214,182,92,0.4)';
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.4;
       ctx.stroke();
-      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + 22, 18, settings.autoX ? '#c2a24a' : t.muted);
+      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + 27, 24, settings.autoX ? '#c2a24a' : t.muted);
       zones.autoXBtn = ax;
-      y += 52;
+      y += 62;
       // 呈堂（朱砂大印；未集齐时淡印）
       const allPlaced = ready && Object.keys(placed).length === n;
-      const sub = { x: toolX, y, w: toolW, h: 64 };
+      const sub = { x: toolX, y, w: toolW, h: 84 };
       if (!allPlaced && !done) ctx.globalAlpha = 0.45;
-      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + 30, 56, done ? '已破' : '呈堂', -0.05);
+      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + 40, 76, done ? '已破' : '呈堂', -0.05);
       ctx.globalAlpha = 1;
       zones.submitBtn = sub;
       return;
@@ -4060,6 +4061,38 @@ function createPlayScene(manager, opts) {
     }
     const cw = clueW - 16 - strip;
 
+    /* 嫌疑人卡数据先行（不绘制）：用于行高与整体居中计算 */
+    const COLS = 3, GAP = 8;
+    const cardW = (cw - (COLS - 1) * GAP) / COLS;
+    const AV = LAND ? 52 : Math.round(cardW * 0.44);
+    const nameFs = LAND ? 15 : 13;
+    const clueFs = LAND ? 13 : 11;
+    const lineH = clueFs + 4;
+    const peopleCards = [];
+    board.people.forEach(p => {
+      const pairs = [];
+      board.clues.forEach((clue, i) => {
+        if (!GENERAL_TYPES.has(clue.type) && clue.p === p.id) pairs.push([clue, i]);
+      });
+      if (!pairs.length) return;
+      ctx.font = `bold ${clueFs}px ${FONTS.song}`;
+      const text = pairs.map(([c]) => stripTags(c.text)).join('');
+      const lines = wrapText(ctx, text, cardW - 12);
+      const cardH = 8 + AV + 5 + (nameFs + 5) + 4 + lines.length * lineH + 8;
+      peopleCards.push({ p, lines, cardH });
+    });
+    // 行高分组 + 内容总高
+    const rowsMeta = [];
+    for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
+      rowsMeta.push(Math.max(...peopleCards.slice(r0, r0 + COLS).map(c => c.cardH)));
+    }
+    const gch = LAND && generalLines().length ? generalLines().length * 18 + 30 + 6 : 0;
+    const rowsH = rowsMeta.reduce((a, b) => a + b, 0) + Math.max(0, rowsMeta.length - 1) * GAP;
+    const totalH = gch + rowsH;
+    // 视觉平衡：内容不满栏时整组垂直居中（而非全堆顶部）
+    const bandH0 = clueBandBottom - clueBandY;
+    if (totalH < bandH0) y = 2 + (bandH0 - totalH) / 2;
+
     // 横屏：通用线索卡并入列表首位
     if (LAND) {
       const lines = generalLines();
@@ -4084,27 +4117,7 @@ function createPlayScene(manager, opts) {
       y += ch + 6;
     }
 
-    /* 嫌疑人卡：Murdoku 式三列网格（上头像 / 中姓名 / 下线索；一行三人）。
-     * 先按行分组求行高（行内底对齐），再逐卡绘制。 */
-    const COLS = 3, GAP = 8;
-    const cardW = (cw - (COLS - 1) * GAP) / COLS;
-    const AV = LAND ? 52 : Math.round(cardW * 0.44);
-    const nameFs = LAND ? 15 : 13;
-    const clueFs = LAND ? 13 : 11;
-    const lineH = clueFs + 4;
-    const peopleCards = [];
-    board.people.forEach(p => {
-      const pairs = [];
-      board.clues.forEach((clue, i) => {
-        if (!GENERAL_TYPES.has(clue.type) && clue.p === p.id) pairs.push([clue, i]);
-      });
-      if (!pairs.length) return;
-      ctx.font = `bold ${clueFs}px ${FONTS.song}`;
-      const text = pairs.map(([c]) => stripTags(c.text)).join('');
-      const lines = wrapText(ctx, text, cardW - 12);
-      const cardH = 8 + AV + 5 + (nameFs + 5) + 4 + lines.length * lineH + 8;
-      peopleCards.push({ p, lines, cardH });
-    });
+    /* 嫌疑人卡：Murdoku 式三列网格（上头像 / 中姓名 / 下线索；一行三人）。 */
     for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
       const rowCards = peopleCards.slice(r0, r0 + COLS);
       const rowH = Math.max(...rowCards.map(c => c.cardH));
@@ -4134,19 +4147,24 @@ function createPlayScene(manager, opts) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(p.short, avX + AV - 8.5, avY + AV - 9);
-        // 中：姓名+性别整体居中（被害者标明身份）
+        // 中：姓名+性别整体居中（被害者标明身份）；容器约束：超宽则逐级缩字，绝不出框
         const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
-        ctx.font = `bold ${nameFs}px ${FONTS.kai}`;
-        const nameW = ctx.measureText(namePart).width;
         const gW = 16;
-        let gx = x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2;
-        gx = Math.max(x + 4, gx);   // 被害者长名放不下时靠左不溢出
+        let nfs = nameFs;
+        ctx.font = `bold ${nfs}px ${FONTS.kai}`;
+        let nameW = ctx.measureText(namePart).width;
+        while (nameW + (p.isVictim ? 0 : gW) > cardW - 10 && nfs > 11) {
+          nfs -= 1;
+          ctx.font = `bold ${nfs}px ${FONTS.kai}`;
+          nameW = ctx.measureText(namePart).width;
+        }
+        const gx = Math.max(x + 5, x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2);
         const gy = avY + AV + 5 + (nameFs + 5) / 2;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
         ctx.fillText(namePart, gx, gy);
-        if (!p.isVictim) {
+        if (!p.isVictim && gx + nameW + gW <= x + cardW - 4) {
           ctx.fillStyle = p.gender === 'F' ? '#b13a30' : '#33465a';
           ctx.fillText(p.gender === 'F' ? '♀' : '♂', gx + nameW + 4, gy);
         }
@@ -4514,17 +4532,18 @@ function createPlayScene(manager, opts) {
       drawToolbar(ctx, t);
       drawClues(ctx, t);
 
-      // toast
+      // toast（横屏贴底避框，竖屏在功能条上方）
       if (Date.now() < toastUntil) {
+        const toastY = LAND ? H - 46 : toolY - 40;
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         const tw = ctx.measureText(toastMsg).width + 32;
-        roundRect(ctx, (W - tw) / 2, toolY - 40, tw, 30, 15);
+        roundRect(ctx, (W - tw) / 2, toastY, tw, 30, 15);
         ctx.fill();
         ctx.fillStyle = '#f5eeda';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(toastMsg, W / 2, toolY - 25);
+        ctx.fillText(toastMsg, W / 2, toastY + 15);
         manager.invalidate(); // 到期自动消失
       }
 
