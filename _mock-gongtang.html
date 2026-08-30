@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>墨案缉凶 · 公堂卷轴（视觉稿）</title>
+<style>html,body{margin:0;padding:0;background:#16130e;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="cv" width="1440" height="900"></canvas>
+<script src="./js/assets-inline.js"></script>
+<script>
+/* ===== 墨案「水墨公堂」桌面视觉稿（静态 mock，非游戏代码） ===== */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = 1440, H = 900;
+
+const INK = '#1b1710';      // 松烟墨
+const INK2 = '#2a241a';
+const XUAN = '#f2ecdd';     // 宣纸
+const XUAN_D = '#e7dcc2';   // 宣纸暗一档
+const CINNABAR = '#b13a30'; // 朱砂
+const INDIGO = '#33465a';   // 黛青
+const GOLD = '#c2a24a';     // 金箔
+const KAI = '"KaiTi","STKaiti","楷体",serif';
+const SONG = '"Noto Serif SC","Source Han Serif SC","SimSun",serif';
+
+const img = k => { const i = new Image(); i.src = window.MOAN_INLINE[k]; return i; };
+const IMGS = {};
+function preload(keys, done) {
+  let n = 0;
+  keys.forEach(k => {
+    const i = img(k); IMGS[k] = i;
+    i.onload = i.onerror = () => { if (++n === keys.length) done(); };
+  });
+}
+
+/* ---------- 材质：宣纸纤维纹 ---------- */
+function paperGrain(x, y, w, h, alpha = 0.05) {
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  for (let i = 0; i < w * h / 900; i++) {
+    const px = x + Math.random() * w, py = y + Math.random() * h;
+    ctx.fillStyle = `rgba(120,100,60,${Math.random() * alpha})`;
+    ctx.fillRect(px, py, 1.2, 1.2);
+  }
+  // 云絮
+  for (let i = 0; i < 7; i++) {
+    const px = x + Math.random() * w, py = y + Math.random() * h, r = 30 + Math.random() * 90;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(180,160,110,0.05)');
+    g.addColorStop(1, 'rgba(180,160,110,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+  ctx.restore();
+}
+
+/* ---------- 环境底：淡墨山水 ---------- */
+function inkMountains() {
+  const layers = [
+    { y: 720, a: 0.09, amp: 60 },
+    { y: 780, a: 0.13, amp: 45 },
+  ];
+  layers.forEach((L, li) => {
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    let x = 0;
+    ctx.lineTo(0, L.y);
+    while (x < W) {
+      const peak = L.y - L.amp - Math.random() * L.amp;
+      const mid = x + 120 + Math.random() * 160;
+      ctx.quadraticCurveTo(x + (mid - x) / 2, peak, mid, L.y + Math.random() * 20 - 10);
+      x = mid;
+    }
+    ctx.lineTo(W, L.y);
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(60,70,80,${L.a})`;
+    ctx.fill();
+  });
+  // 远日
+  const g = ctx.createRadialGradient(1140, 180, 10, 1140, 180, 160);
+  g.addColorStop(0, 'rgba(194,162,74,0.10)');
+  g.addColorStop(1, 'rgba(194,162,74,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(980, 20, 320, 320);
+}
+
+/* ---------- 印章 ---------- */
+function seal(cx, cy, size, text, rot = -0.05, fontScale = 0.42) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  const s = size / 2;
+  // 印体：朱砂圆角方 + 糙边
+  ctx.fillStyle = CINNABAR;
+  roundRectPath(-s, -s, size, size, size * 0.12);
+  ctx.fill();
+  for (let i = 0; i < 40; i++) {  // 印泥糙感
+    ctx.fillStyle = 'rgba(242,236,221,0.10)';
+    const a = Math.random() * Math.PI * 2, r = size * 0.44 * Math.random();
+    ctx.fillRect(Math.cos(a) * r, Math.sin(a) * r, 1.5, 1.5);
+  }
+  ctx.fillStyle = XUAN;
+  ctx.font = `${Math.round(size * fontScale)}px ${KAI}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (text.length <= 2) {
+    ctx.fillText(text[0], 0, -size * 0.22);
+    ctx.fillText(text[1] || '', 0, size * 0.20);
+  } else {
+    ctx.fillText(text, 0, 0);
+  }
+  ctx.restore();
+}
+function roundRectPath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ---------- 竖排文字 ---------- */
+function vText(str, x, y, size, color, gap = 6, font = KAI) {
+  ctx.font = `${size}px ${font}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  [...str].forEach((ch, i) => ctx.fillText(ch, x, y + i * (size + gap)));
+}
+
+/* ---------- 棋盘（装裱） ---------- */
+const N = 8, CELL = 82.5, SIDE = N * CELL;         // 660：与案卷同高（微调①）
+const BX = 530, BY = 120;                          // 板左上角（装裱内，与卷轴顶底齐平）
+const FLOORS = {
+  hall: 'assets/objects/floor-white.png',
+  study: 'assets/objects/zhaiyuan/Meshy_AI_tile-goldBrick.png',
+  wing: 'assets/objects/floor-wood.png',
+  court: 'assets/objects/floor-bluestone.png',
+  garden: 'assets/objects/floor-grass.png',
+};
+const ROOMS = [
+  { id: 0, name: '厅堂', f: 'hall' }, { id: 1, name: '书房', f: 'study' },
+  { id: 2, name: '东厢房', f: 'wing' }, { id: 3, name: '回廊', f: 'court' },
+  { id: 4, name: '花园', f: 'garden' },
+];
+// 8×8 房间归属（mock）
+const RA = [
+  0,0,0,1,1,3,4,4,
+  0,0,0,1,1,3,4,4,
+  0,0,2,2,3,3,4,4,
+  0,2,2,2,3,3,4,4,
+  0,2,2,3,3,3,4,4,
+  0,0,3,3,1,3,4,4,
+  0,0,3,1,1,3,4,4,
+  0,0,3,3,3,3,4,4,
+];
+const OBJS = [
+  { k: 'assets/objects/zhaiyuan/desk.png', r: 1, c: 3 },
+  { k: 'assets/objects/zhaiyuan/shelf.png', r: 0, c: 4 },
+  { k: 'assets/objects/zhaiyuan/bed.png', r: 3, c: 1 },
+  { k: 'assets/objects/zhaiyuan/qin.png', r: 4, c: 2 },
+  { k: 'assets/objects/zhaiyuan/matBamboo.png', r: 6, c: 4 },
+  { k: 'assets/objects/zhaiyuan/matBamboo.png', r: 6, c: 5 },
+  { k: 'assets/objects/zhaiyuan/vat.png', r: 2, c: 5 },
+  { k: 'assets/objects/zhaiyuan/table.png', r: 0, c: 1 },
+];
+const TOKENS = [
+  { k: 'assets/avatars/shishenzhaiyuan/cut-guanjia.png', s: '管', r: 0, c: 2, color: '#7a4a2b' },
+  { k: 'assets/avatars/shishenzhaiyuan/cut-chunlan.png', s: '春', r: 2, c: 6, color: '#b13a30' },
+  { k: 'assets/avatars/shishenzhaiyuan/cut-xixi.png', s: '熙', r: 5, c: 4, color: '#33465a' },
+];
+const XES = [[1, 6], [1, 7], [2, 7], [6, 0], [7, 3]];
+const NOTES = [{ s: '熙', r: 4, c: 5, color: '#33465a' }, { s: '春', r: 1, c: 5, color: '#b13a30' }];
+
+function drawFrame() {
+  // 装裱：阴影 + 深色绫绢框 + 金线
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 34;
+  ctx.shadowOffsetY = 14;
+  ctx.fillStyle = '#241d12';
+  roundRectPath(BX - 26, BY - 26, SIDE + 52, SIDE + 52, 6);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#241d12';
+  roundRectPath(BX - 26, BY - 26, SIDE + 52, SIDE + 52, 6);
+  ctx.fill();
+  // 绫绢暗纹
+  ctx.save();
+  roundRectPath(BX - 26, BY - 26, SIDE + 52, SIDE + 52, 6);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(194,162,74,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = -SIDE; i < SIDE * 2; i += 14) {
+    ctx.beginPath(); ctx.moveTo(BX - 26 + i, BY - 26); ctx.lineTo(BX - 26 + i + SIDE, BY - 26 + SIDE + 52); ctx.stroke();
+  }
+  ctx.restore();
+  // 浅色绫边内衬 + 亮金线
+  ctx.strokeStyle = 'rgba(231,220,194,0.35)';
+  ctx.lineWidth = 5;
+  roundRectPath(BX - 20, BY - 20, SIDE + 40, SIDE + 40, 4);
+  ctx.stroke();
+  ctx.strokeStyle = GOLD;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 1.0;
+  roundRectPath(BX - 14, BY - 14, SIDE + 28, SIDE + 28, 3);
+  ctx.stroke();
+}
+
+function drawBoard() {
+  // 地板
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const imgk = FLOORS[ROOMS[RA[r * N + c]].f];
+    ctx.drawImage(IMGS[imgk], BX + c * CELL, BY + r * CELL, CELL, CELL);
+  }
+  // 细格
+  ctx.strokeStyle = 'rgba(30,25,15,0.16)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= N; i++) {
+    ctx.beginPath(); ctx.moveTo(BX + i * CELL, BY); ctx.lineTo(BX + i * CELL, BY + SIDE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(BX, BY + i * CELL); ctx.lineTo(BX + SIDE, BY + i * CELL); ctx.stroke();
+  }
+  // 房间墙（粗墨线）
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const id = RA[r * N + c];
+    if (c + 1 < N && RA[r * N + c + 1] !== id) { ctx.beginPath(); ctx.moveTo(BX + (c + 1) * CELL, BY + r * CELL); ctx.lineTo(BX + (c + 1) * CELL, BY + (r + 1) * CELL); ctx.stroke(); }
+    if (r + 1 < N && RA[(r + 1) * N + c] !== id) { ctx.beginPath(); ctx.moveTo(BX + c * CELL, BY + (r + 1) * CELL); ctx.lineTo(BX + (c + 1) * CELL, BY + (r + 1) * CELL); ctx.stroke(); }
+  }
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(BX, BY, SIDE, SIDE);
+  // 物件
+  OBJS.forEach(o => ctx.drawImage(IMGS[o.k], BX + o.c * CELL + 6, BY + o.r * CELL + 6, CELL - 12, CELL - 12));
+  // 排除叉
+  XES.forEach(([r, c]) => {
+    ctx.strokeStyle = 'rgba(27,23,16,0.88)';
+    ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(BX + c * CELL + 15, BY + r * CELL + 15);
+    ctx.lineTo(BX + (c + 1) * CELL - 15, BY + (r + 1) * CELL - 15);
+    ctx.moveTo(BX + (c + 1) * CELL - 15, BY + r * CELL + 15);
+    ctx.lineTo(BX + c * CELL + 15, BY + (r + 1) * CELL - 15);
+    ctx.stroke();
+  });
+  // 批注
+  NOTES.forEach(nt => {
+    ctx.font = `bold 27px ${KAI}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.lineWidth = 5; ctx.strokeStyle = '#161310';
+    ctx.strokeText(nt.s, BX + nt.c * CELL + 5, BY + nt.r * CELL + 4);
+    ctx.fillStyle = nt.color;
+    ctx.fillText(nt.s, BX + nt.c * CELL + 5, BY + nt.r * CELL + 4);
+  });
+  // 人物 token + 徽章
+  TOKENS.forEach(t => {
+    ctx.drawImage(IMGS[t.k], BX + t.c * CELL + 4, BY + t.r * CELL + 1, CELL - 8, CELL - 2);
+    ctx.fillStyle = 'rgba(242,236,221,0.95)';
+    roundRectPath(BX + t.c * CELL + 4, BY + t.r * CELL + 4, 24, 19, 4);
+    ctx.fill();
+    ctx.fillStyle = '#2a241a';
+    ctx.font = `bold 14px ${KAI}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(t.s, BX + t.c * CELL + 16, BY + t.r * CELL + 13.5);
+  });
+  // 房间名（原逻辑：所在区域最底行最长连续段的中央，贴下框线；白边墨字，顶层）
+  ctx.font = `bold 25px ${KAI}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ROOMS.forEach(room => {
+    let rMax = -1;
+    for (let i = 0; i < N * N; i++) if (RA[i] === room.id) rMax = Math.max(rMax, Math.floor(i / N));
+    if (rMax < 0) return;
+    const cols = [];
+    for (let c = 0; c < N; c++) if (RA[rMax * N + c] === room.id) cols.push(c);
+    let bestS = cols[0], bestLen = 1, curS = cols[0], curLen = 1;
+    for (let k = 1; k <= cols.length; k++) {
+      if (k < cols.length && cols[k] === cols[k - 1] + 1) curLen++;
+      else {
+        if (curLen > bestLen) { bestS = curS; bestLen = curLen; }
+        curS = cols[k]; curLen = 1;
+      }
+    }
+    const lx = BX + (bestS + bestLen / 2) * CELL, ly = BY + (rMax + 1) * CELL - 3;
+    ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(248,246,238,0.95)'; ctx.lineJoin = 'round';
+    ctx.strokeText(room.name, lx, ly);
+    ctx.fillStyle = INK;
+    ctx.fillText(room.name, lx, ly);
+  });
+  // 坐标（天干地支，楷体描金边，压在装裱金线与板缘之间）
+  const STEM = '甲乙丙丁戊己庚辛';
+  ctx.font = `22px ${KAI}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(214,182,92,1)';
+  for (let i = 0; i < N; i++) {
+    ctx.fillText(STEM[i], BX + (i + 0.5) * CELL, BY - 34);
+    ctx.fillText(STEM[i], BX - 34, BY + (i + 0.5) * CELL);
+  }
+}
+
+/* ---------- 左栏：案卷（证词册页） ---------- */
+function drawScroll() {
+  const x = 70, y = 120, w = 360, h = 660;
+  // 卷轴纸面
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 8;
+  ctx.fillStyle = XUAN;
+  roundRectPath(x, y, w, h, 8);
+  ctx.fill();
+  ctx.restore();
+  paperGrain(x, y, w, h);
+  // 册页双边线
+  ctx.strokeStyle = 'rgba(177,58,48,0.55)';
+  ctx.lineWidth = 1.4;
+  roundRectPath(x + 10, y + 10, w - 20, h - 20, 5);
+  ctx.stroke();
+  // 竖排栏头「證詞」
+  vText('證詞', x + w - 42, y + 30, 30, CINNABAR, 10);
+  ctx.strokeStyle = 'rgba(177,58,48,0.4)';
+  ctx.beginPath(); ctx.moveTo(x + w - 64, y + 24); ctx.lineTo(x + w - 64, y + 120); ctx.stroke();
+  // 案名
+  ctx.font = `22px ${KAI}`;
+  ctx.fillStyle = INK;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('沈府夜宴案', x + 30, y + 28);
+  ctx.font = `12px ${SONG}`;
+  ctx.fillStyle = 'rgba(51,70,90,0.8)';
+  ctx.fillText('非常简单 · 第壹案', x + 30, y + 58);
+  // 朱墨分隔
+  ctx.strokeStyle = 'rgba(177,58,48,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x + 30, y + 84); ctx.lineTo(x + w - 84, y + 84); ctx.stroke();
+
+  // 嫌疑人卡：Murdoku 式三列网格（微调②：上头像 / 中姓名 / 下线索）
+  const people = [
+    { av: 'assets/avatars/shishenzhaiyuan/guanjia.png', name: '管忠', s: '管', g: '♂', clue: '身处书房。恰在春兰上面一行。' },
+    { av: 'assets/avatars/shishenzhaiyuan/chunlan.png', name: '春兰', s: '春', g: '♀', clue: '与古琴同在一条斜线上。不在竹席上。' },
+    { av: 'assets/avatars/shishenzhaiyuan/xixi.png', name: '柳熙熙', s: '熙', g: '♀', clue: '仅与一位男士同屋。身处墙角。' },
+    { av: 'assets/avatars/shishenzhaiyuan/zhangfang.png', name: '张账房', s: '张', g: '♂', clue: '与卧床在同一行。' },
+    { av: 'assets/avatars/shishenzhaiyuan/daxiaojie.png', name: '沈小姐', s: '沈', g: '♀', clue: '不在花园。与管忠同屋。' },
+    { av: 'assets/avatars/shishenzhaiyuan/laoye.png', name: '沈老爷', s: '爷', g: '♂', clue: '正坐在太师椅上。' },
+  ];
+  const colW = 98, gapX = 9, rowH = 172;
+  people.forEach((p, idx) => {
+    const cx0 = x + 24 + (idx % 3) * (colW + gapX);
+    const cy0 = y + 100 + Math.floor(idx / 3) * rowH;
+    // 卡底
+    ctx.fillStyle = 'rgba(231,220,194,0.55)';
+    roundRectPath(cx0, cy0, colW, rowH - 12, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(42,36,26,0.35)';
+    ctx.lineWidth = 1;
+    roundRectPath(cx0, cy0, colW, rowH - 12, 6);
+    ctx.stroke();
+    // 上：头像（含简称徽章）
+    const avS = 52, avX = cx0 + (colW - avS) / 2, avY = cy0 + 8;
+    ctx.drawImage(IMGS[p.av], avX, avY, avS, avS);
+    ctx.strokeStyle = 'rgba(194,162,74,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(avX, avY, avS, avS);
+    ctx.fillStyle = 'rgba(242,236,221,0.95)';
+    roundRectPath(avX - 3, avY - 3, 17, 14, 3);
+    ctx.fill();
+    ctx.fillStyle = '#2a241a';
+    ctx.font = `bold 10px ${KAI}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.s, avX + 5.5, avY + 4);
+    // 中：姓名 + 性别（整体居中：名+性别作为一组居中）
+    ctx.font = `bold 15px ${KAI}`;
+    ctx.fillStyle = INK;
+    const nameW = ctx.measureText(p.name).width, gW = 16;
+    const gx = cx0 + (colW - nameW - gW) / 2;
+    ctx.textAlign = 'left';
+    ctx.fillText(p.name, gx, avY + avS + 6);
+    ctx.font = `12px ${SONG}`;
+    ctx.fillStyle = p.g === '♀' ? CINNABAR : INDIGO;
+    ctx.fillText(p.g, gx + nameW + 4, avY + avS + 8);
+    // 下：线索（加粗）
+    ctx.font = `bold 11px ${SONG}`;
+    ctx.fillStyle = '#2a241c';
+    wrapText(p.clue, colW - 14).forEach((s, i) => {
+      ctx.fillText(s, cx0 + 7, avY + avS + 28 + i * 15);
+    });
+  });
+  // 卷轴轴头（硬木 + 金箍）
+  ctx.fillStyle = '#4a3a24';
+  roundRectPath(x - 6, y - 8, w + 12, 12, 6);
+  ctx.fill();
+  roundRectPath(x - 6, y + h - 4, w + 12, 12, 6);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(194,162,74,0.65)';
+  ctx.fillRect(x + 18, y - 8, 4, 12);
+  ctx.fillRect(x + w - 22, y - 8, 4, 12);
+  ctx.fillRect(x + 18, y + h - 4, 4, 12);
+  ctx.fillRect(x + w - 22, y + h - 4, 4, 12);
+  // 卷尾闲章：「提刑」朱文小印
+  seal(x + w - 54, y + h - 40, 34, '提刑', -0.04, 0.38);
+}
+
+function wrapText(text, maxW) {
+  const out = [];
+  let line = '';
+  for (const ch of text) {
+    if (ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+    else line += ch;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+/* ---------- 右栏：印绶（呈堂 + 文房工具） ---------- */
+function drawTools() {
+  const cx = 1290;
+  // 呈堂大印
+  seal(cx, 210, 92, '呈堂', -0.06);
+  ctx.font = `14px ${KAI}`;
+  ctx.fillStyle = 'rgba(214,182,92,0.9)';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('断 案', cx, 274);
+  // 竖分隔线
+  ctx.strokeStyle = 'rgba(194,162,74,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(cx, 302); ctx.lineTo(cx, 332); ctx.stroke();
+  // 文房工具
+  const tools = [
+    { name: '批注', draw: drawBrush },
+    { name: '排除', draw: drawCinnabarX },
+    { name: '擦除', draw: drawInkstone },
+    { name: '提点', draw: drawScrollIcon },
+  ];
+  let ty = 350;
+  tools.forEach(t => {
+    // 底：墨色圆牌
+    ctx.fillStyle = 'rgba(242,236,221,0.12)';
+    ctx.beginPath(); ctx.arc(cx, ty + 34, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(214,182,92,0.7)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    t.draw(cx, ty + 34);
+    ctx.font = `14px ${KAI}`;
+    ctx.fillStyle = 'rgba(242,236,221,0.92)';
+    ctx.fillText(t.name, cx, ty + 76);
+    ty += 104;
+  });
+  // 底部微文案
+  ctx.font = `12px ${SONG}`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(214,182,92,0.75)';
+  ctx.fillText('点按批注 · 长按放置 · 右键排除', cx, 800);
+}
+function drawBrush(cx, cy) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(-0.7); ctx.scale(1.35, 1.35);
+  ctx.fillStyle = '#8a6a3e';
+  roundRectPath(-3, -22, 6, 26, 3); ctx.fill();
+  ctx.fillStyle = '#d8cba8';
+  roundRectPath(-3, 4, 6, 6, 2); ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.beginPath(); ctx.moveTo(-3, 10); ctx.quadraticCurveTo(0, 24, 3, 10); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawCinnabarX(cx, cy) {
+  ctx.strokeStyle = CINNABAR;
+  ctx.lineWidth = 6; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - 12, cy - 12); ctx.lineTo(cx + 12, cy + 12);
+  ctx.moveTo(cx + 12, cy - 12); ctx.lineTo(cx - 12, cy + 12);
+  ctx.stroke();
+}
+function drawInkstone(cx, cy) {
+  ctx.fillStyle = '#4a4234';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 4, 17, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 12, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(90,110,140,0.55)';
+  ctx.beginPath(); ctx.ellipse(cx - 3, cy + 1, 6, 3.5, -0.25, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(231,220,194,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(cx, cy + 4, 17, 12, 0, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+}
+function drawScrollIcon(cx, cy) {
+  ctx.fillStyle = XUAN_D;
+  roundRectPath(cx - 13, cy - 16, 26, 32, 3); ctx.fill();
+  ctx.strokeStyle = 'rgba(42,36,26,0.5)'; ctx.lineWidth = 1;
+  roundRectPath(cx - 13, cy - 16, 26, 32, 3); ctx.stroke();
+  ctx.strokeStyle = CINNABAR; ctx.lineWidth = 1.6;
+  [-8, -2, 4].forEach(dy => { ctx.beginPath(); ctx.moveTo(cx - 8, cy + dy); ctx.lineTo(cx + 8, cy + dy); ctx.stroke(); });
+  ctx.fillStyle = CINNABAR;
+  ctx.beginPath(); ctx.arc(cx + 9, cy - 16, 4, 0, Math.PI * 2); ctx.fill();
+}
+
+/* ---------- 头部 ---------- */
+function drawHeader() {
+  seal(74, 66, 46, '墨案', -0.04, 0.4);
+  ctx.font = `30px ${KAI}`;
+  ctx.fillStyle = XUAN;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('墨 案 缉 凶', 108, 62);
+  ctx.font = `13px ${SONG}`;
+  ctx.fillStyle = 'rgba(194,162,74,0.75)';
+  ctx.fillText('南宋公案推理 · 提刑官勘验现场', 110, 92);
+  // 金线
+  const g = ctx.createLinearGradient(60, 0, W - 60, 0);
+  g.addColorStop(0, 'rgba(194,162,74,0)');
+  g.addColorStop(0.2, 'rgba(194,162,74,0.55)');
+  g.addColorStop(0.8, 'rgba(194,162,74,0.55)');
+  g.addColorStop(1, 'rgba(194,162,74,0)');
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(60, 116); ctx.lineTo(W - 60, 116); ctx.stroke();
+  // 右上：计时 + 设置
+  ctx.font = `15px ${SONG}`;
+  ctx.fillStyle = 'rgba(242,236,221,0.75)';
+  ctx.textAlign = 'right';
+  ctx.fillText('04:37', W - 70, 62);
+  ctx.font = `13px ${KAI}`;
+  ctx.fillText('玩法 · 横竖 · 明暗', W - 70, 88);
+}
+
+/* ---------- 主绘 ---------- */
+const KEYS = [
+  ...Object.values(FLOORS),
+  ...OBJS.map(o => o.k),
+  ...TOKENS.map(t => t.k),
+  'assets/avatars/shishenzhaiyuan/guanjia.png',
+  'assets/avatars/shishenzhaiyuan/chunlan.png',
+  'assets/avatars/shishenzhaiyuan/xixi.png',
+  'assets/avatars/shishenzhaiyuan/zhangfang.png',
+  'assets/avatars/shishenzhaiyuan/daxiaojie.png',
+  'assets/avatars/shishenzhaiyuan/laoye.png',
+];
+preload(KEYS, () => {
+  ctx.fillStyle = '#16130e';
+  ctx.fillRect(0, 0, W, H);
+  inkMountains();
+  // 中央淡纸光（聚焦棋盘）
+  const g = ctx.createRadialGradient(BX + SIDE / 2, BY + SIDE / 2, 100, BX + SIDE / 2, BY + SIDE / 2, 620);
+  g.addColorStop(0, 'rgba(242,236,221,0.05)');
+  g.addColorStop(1, 'rgba(242,236,221,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  drawHeader();
+  drawScroll();
+  drawFrame();
+  drawBoard();
+  drawTools();
+  // 四角暗角
+  const v = ctx.createRadialGradient(W / 2, H / 2, H / 2, W / 2, H / 2, H);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,0.32)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+  document.title = '墨案缉凶 · 公堂卷轴（已渲染）';
+});
+</script>
+</body>
+</html>

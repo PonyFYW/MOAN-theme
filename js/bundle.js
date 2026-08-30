@@ -2591,18 +2591,35 @@ module.exports = { drawSVG };
 
 });
 __def("src/ui/theme.js", function (require, module, exports) {
-/* 主题配色（canvas 无 CSS 变量， palettes 手工维护，对应 Web 版 dataset.theme）。 */
+/* 主题配色（canvas 无 CSS 变量， palettes 手工维护，对应 Web 版 dataset.theme）。
+ * v4.0「水墨公堂」设计系统：松烟墨/宣纸/朱砂/黛青/金箔 五色纪律（docs/design/公堂卷轴-桌面视觉稿-v5.png）。 */
+const INK = '#1b1710';      // 松烟墨（文字/墙线）
+const XUAN = '#f2ecdd';     // 宣纸（卡面）
+const XUAN_D = '#e7dcc2';   // 宣纸暗一档（通用线索/分区底）
+const CINNABAR = '#b13a30'; // 朱砂（强调/印章/选中）
+const INDIGO = '#33465a';   // 黛青（次要信息/性别♂）
+const GOLD = '#c2a24a';     // 金箔（描边/坐标/点缀）
+
 const PALETTES = {
   dark: {
-    bg: '#121510', card: '#1c221a', cardEdge: '#2a2f26',
-    fg: '#e8e2d0', muted: '#8b8f7e', faint: '#6b6f5e',
-    accent: '#b84038', gold: '#c9a35c', ok: '#7ec97e', dim: 'rgba(0,0,0,0.62)'
+    bg: '#16130e', card: '#221c12', cardEdge: '#4a3f28',
+    fg: XUAN, muted: '#9a8f74', faint: '#6b6250',
+    accent: CINNABAR, gold: GOLD, ok: '#7ec97e', dim: 'rgba(0,0,0,0.62)',
+    ink: INK, xuan: XUAN, xuanD: XUAN_D, indigo: INDIGO
   },
   light: {
-    bg: '#f2eee2', card: '#ffffff', cardEdge: '#ddd5c0',
+    bg: '#f2eee2', card: '#faf5e8', cardEdge: '#ddd5c0',
     fg: '#2a2620', muted: '#8a8064', faint: '#a39b7e',
-    accent: '#b84038', gold: '#9a7526', ok: '#3e8e4e', dim: 'rgba(60,55,40,0.45)'
+    accent: CINNABAR, gold: '#9a7526', ok: '#3e8e4e', dim: 'rgba(60,55,40,0.45)',
+    ink: INK, xuan: XUAN, xuanD: XUAN_D, indigo: INDIGO
   }
+};
+
+/* 字体栈（P1 先走系统字体：Windows KaiTi / macOS STKaiti / 宋体兜底；
+ * webfont 子集内联（马善政/落霞文楷 + Noto Serif SC）留作后续增强项——Android 无楷体时会回落默认黑体 */
+const FONTS = {
+  kai: '"KaiTi","STKaiti","Kaiti SC","楷体",serif',
+  song: '"Noto Serif SC","Source Han Serif SC","SimSun","宋体",serif'
 };
 
 let current = 'dark';
@@ -2610,13 +2627,14 @@ let current = 'dark';
 function setTheme(name) { if (PALETTES[name]) current = name; }
 function theme() { return PALETTES[current]; }
 function themeName() { return current; }
-function toggleTheme() { current = current === 'dark' ? 'light' : 'dark'; return current; }
+function toggleTheme() { current = current === 'light' ? 'dark' : 'light'; return current; }
 
-module.exports = { setTheme, theme, themeName, toggleTheme };
+module.exports = { setTheme, theme, themeName, toggleTheme, FONTS, INK, XUAN, XUAN_D, CINNABAR, INDIGO, GOLD };
 
 });
 __def("src/ui/widgets.js", function (require, module, exports) {
 /* 通用绘制小部件与工具函数。 */
+const { FONTS } = require('src/ui/theme.js');
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -2641,41 +2659,69 @@ function fmtTime(sec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-/* 印章 logo（与 Web 版 main.js 的 SVG 同款）：红底圆角 + 内框 + 墨案二字 */
+/* 印章 logo（与 Web 版 main.js 的 SVG 同款）：红底圆角 + 内框 + 墨案二字（楷体） */
 function drawSeal(ctx, cx, y, S) {
-  ctx.fillStyle = '#b84038';
+  ctx.fillStyle = '#b13a30';
   roundRect(ctx, cx - S / 2, y, S, S, S * 0.18);
   ctx.fill();
-  ctx.strokeStyle = '#f5eeda';
+  ctx.strokeStyle = '#f2ecdd';
   ctx.lineWidth = Math.max(2, S * 0.025);
   roundRect(ctx, cx - S / 2 + S * 0.067, y + S * 0.067, S * 0.866, S * 0.866, S * 0.13);
   ctx.stroke();
-  ctx.fillStyle = '#f5eeda';
+  ctx.fillStyle = '#f2ecdd';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `${Math.round(S * 0.36)}px serif`;
+  ctx.font = `${Math.round(S * 0.36)}px ${FONTS.kai}`;
   ctx.fillText('墨', cx, y + S * 0.30);
   ctx.fillText('案', cx, y + S * 0.72);
 }
 
-/* 朱砂印锁定标识（drawSeal 同款红底白文）：1 字居中，3 字竖排 */
-function drawLockSeal(ctx, cx, cy, S, text) {
-  ctx.fillStyle = '#b84038';
-  roundRect(ctx, cx - S / 2, cy - S / 2, S, S, S * 0.16);
+/* 朱砂印（通用）：任意文字白文印（1 字居中 / 2 字上下 / ≥3 字竖排），糙边印泥质感 */
+function drawCinnabarSeal(ctx, cx, cy, S, text, rot) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot || 0);
+  ctx.fillStyle = '#b13a30';
+  roundRect(ctx, -S / 2, -S / 2, S, S, S * 0.14);
   ctx.fill();
-  ctx.strokeStyle = '#f5eeda';
-  ctx.lineWidth = Math.max(1.5, S * 0.03);
-  roundRect(ctx, cx - S / 2 + S * 0.08, cy - S / 2 + S * 0.08, S * 0.84, S * 0.84, S * 0.12);
-  ctx.stroke();
-  ctx.fillStyle = '#f5eeda';
+  ctx.fillStyle = '#f2ecdd';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const chars = String(text).split('');
   if (chars.length === 1) {
-    ctx.font = `${Math.round(S * 0.52)}px serif`;
+    ctx.font = `${Math.round(S * 0.52)}px ${FONTS.kai}`;
+    ctx.fillText(chars[0], 0, S * 0.02);
+  } else if (chars.length === 2) {
+    ctx.font = `${Math.round(S * 0.38)}px ${FONTS.kai}`;
+    ctx.fillText(chars[0], 0, -S * 0.20);
+    ctx.fillText(chars[1], 0, S * 0.22);
+  } else {
+    ctx.font = `${Math.round(S * 0.26)}px ${FONTS.kai}`;
+    const step = S * 0.27;
+    const y0 = -step * (chars.length - 1) / 2;
+    chars.forEach((ch, i) => ctx.fillText(ch, 0, y0 + i * step));
+  }
+  ctx.restore();
+}
+
+/* 朱砂印锁定标识（drawSeal 同款红底白文）：1 字居中，3 字竖排 */
+function drawLockSeal(ctx, cx, cy, S, text) {
+  ctx.fillStyle = '#b13a30';
+  roundRect(ctx, cx - S / 2, cy - S / 2, S, S, S * 0.16);
+  ctx.fill();
+  ctx.strokeStyle = '#f2ecdd';
+  ctx.lineWidth = Math.max(1.5, S * 0.03);
+  roundRect(ctx, cx - S / 2 + S * 0.08, cy - S / 2 + S * 0.08, S * 0.84, S * 0.84, S * 0.12);
+  ctx.stroke();
+  ctx.fillStyle = '#f2ecdd';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const chars = String(text).split('');
+  if (chars.length === 1) {
+    ctx.font = `${Math.round(S * 0.52)}px ${FONTS.kai}`;
     ctx.fillText(chars[0], cx, cy + S * 0.02);
   } else {
-    ctx.font = `${Math.round(S * 0.26)}px serif`;
+    ctx.font = `${Math.round(S * 0.26)}px ${FONTS.kai}`;
     const step = S * 0.27;
     const y0 = cy - step * (chars.length - 1) / 2;
     chars.forEach((ch, i) => ctx.fillText(ch, cx, y0 + i * step));
@@ -2700,7 +2746,138 @@ function wrapText(ctx, text, maxW) {
   return lines;
 }
 
-/* 按钮绘制（实心/幽灵）。 */
+/* ---------- 宣纸纹理（程序生成一次成离屏 tile，平铺用，零逐帧开销） ---------- */
+let _paperTile = null;
+function paperTile() {
+  if (_paperTile) return _paperTile;
+  const S = 96;
+  const cv = (typeof wx !== 'undefined' && wx.createOffscreenCanvas)
+    ? wx.createOffscreenCanvas({ type: '2d', width: S, height: S })
+    : null;
+  if (!cv) return null;
+  const c = cv.getContext('2d');
+  for (let i = 0; i < 110; i++) {
+    c.fillStyle = `rgba(120,100,60,${0.03 + Math.random() * 0.06})`;
+    c.fillRect(Math.random() * S, Math.random() * S, 1.2, 1.2);
+  }
+  for (let i = 0; i < 4; i++) {
+    const px = Math.random() * S, py = Math.random() * S, r = 18 + Math.random() * 30;
+    const g = c.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(180,160,110,0.06)');
+    g.addColorStop(1, 'rgba(180,160,110,0)');
+    c.fillStyle = g;
+    c.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+  _paperTile = cv;
+  return _paperTile;
+}
+/* 宣纸面填充：底色 + 纤维纹平铺（r 圆角） */
+function fillPaper(ctx, x, y, w, h, r, base) {
+  ctx.fillStyle = base || '#f2ecdd';
+  roundRect(ctx, x, y, w, h, r);
+  ctx.fill();
+  const tile = paperTile();
+  if (!tile) return;
+  ctx.save();
+  roundRect(ctx, x, y, w, h, r);
+  ctx.clip();
+  for (let ty = y; ty < y + h; ty += 96) {
+    for (let tx = x; tx < x + w; tx += 96) ctx.drawImage(tile, tx, ty);
+  }
+  ctx.restore();
+}
+
+/* ---------- 文房工具图标（去 emoji：毛笔/朱叉/砚台/卷轴/回锋） ---------- */
+function drawToolIcon(ctx, key, cx, cy, s, color) {
+  const ink = color || '#1b1710';
+  ctx.save();
+  ctx.translate(cx, cy);
+  switch (key) {
+    case 'note': {   // 毛笔（批注）
+      ctx.rotate(-0.7);
+      ctx.fillStyle = '#8a6a3e';
+      roundRect(ctx, -s * 0.09, -s * 0.5, s * 0.18, s * 0.6, s * 0.08);
+      ctx.fill();
+      ctx.fillStyle = '#d8cba8';
+      roundRect(ctx, -s * 0.09, s * 0.1, s * 0.18, s * 0.14, s * 0.05);
+      ctx.fill();
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.09, s * 0.24);
+      ctx.quadraticCurveTo(0, s * 0.58, s * 0.09, s * 0.24);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'x': {      // 朱笔排除
+      ctx.strokeStyle = '#b13a30';
+      ctx.lineWidth = s * 0.16;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.3, -s * 0.3); ctx.lineTo(s * 0.3, s * 0.3);
+      ctx.moveTo(s * 0.3, -s * 0.3); ctx.lineTo(-s * 0.3, s * 0.3);
+      ctx.stroke();
+      break;
+    }
+    case 'erase': {  // 砚台（擦除）
+      ctx.fillStyle = '#4a4234';
+      ctx.beginPath(); ctx.ellipse(0, s * 0.1, s * 0.42, s * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = ink;
+      ctx.beginPath(); ctx.ellipse(0, s * 0.04, s * 0.3, s * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(90,110,140,0.55)';
+      ctx.beginPath(); ctx.ellipse(-s * 0.08, s * 0.02, s * 0.14, s * 0.08, -0.25, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'hint': {   // 卷轴（提点）
+      ctx.fillStyle = '#e7dcc2';
+      roundRect(ctx, -s * 0.32, -s * 0.4, s * 0.64, s * 0.8, s * 0.08);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(42,36,26,0.5)';
+      ctx.lineWidth = Math.max(1, s * 0.03);
+      roundRect(ctx, -s * 0.32, -s * 0.4, s * 0.64, s * 0.8, s * 0.08);
+      ctx.stroke();
+      ctx.strokeStyle = '#b13a30';
+      ctx.lineWidth = s * 0.05;
+      [-0.18, 0, 0.18].forEach(dy => {
+        ctx.beginPath(); ctx.moveTo(-s * 0.2, s * dy); ctx.lineTo(s * 0.2, s * dy); ctx.stroke();
+      });
+      break;
+    }
+    case 'undo': {   // 回锋（撤回）
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = s * 0.13;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, s * 0.05, s * 0.3, -0.2, Math.PI * 1.25);
+      ctx.stroke();
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.34, -s * 0.28);
+      ctx.lineTo(-s * 0.06, -s * 0.34);
+      ctx.lineTo(-s * 0.16, -s * 0.06);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'autoX': {  // 自（自动排除开关：小印 + 朱叉）
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = s * 0.07;
+      roundRect(ctx, -s * 0.36, -s * 0.36, s * 0.72, s * 0.72, s * 0.14);
+      ctx.stroke();
+      ctx.strokeStyle = '#b13a30';
+      ctx.lineWidth = s * 0.12;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.18, -s * 0.18); ctx.lineTo(s * 0.18, s * 0.18);
+      ctx.moveTo(s * 0.18, -s * 0.18); ctx.lineTo(-s * 0.18, s * 0.18);
+      ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+/* 按钮绘制（实心/幽灵；默认楷体） */
 function drawButton(ctx, t, rect, label, opts) {
   opts = opts || {};
   ctx.fillStyle = opts.ghost ? 'rgba(0,0,0,0)' : (opts.bg || t.accent);
@@ -2712,10 +2889,10 @@ function drawButton(ctx, t, rect, label, opts) {
     roundRect(ctx, rect.x, rect.y, rect.w, rect.h, opts.r !== undefined ? opts.r : 10);
     ctx.stroke();
   }
-  ctx.fillStyle = opts.ghost ? t.muted : (opts.fg || '#f5eeda');
+  ctx.fillStyle = opts.ghost ? t.muted : (opts.fg || '#f2ecdd');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = opts.font || '16px sans-serif';
+  ctx.font = opts.font || `16px ${FONTS.kai}`;
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
@@ -2749,7 +2926,7 @@ function drawThemeIcon(ctx, x, y, r, isLight, fg, bg) {
   }
 }
 
-module.exports = { roundRect, hit, fmtTime, drawSeal, drawLockSeal, wrapText, drawButton, drawThemeIcon, canRotate, toggleOrientation };
+module.exports = { roundRect, hit, fmtTime, drawSeal, drawCinnabarSeal, drawLockSeal, wrapText, fillPaper, drawToolIcon, drawButton, drawThemeIcon, canRotate, toggleOrientation };
 
 /* 横竖屏切换能力（基础库 2.26+；旧版/桌面端没有则隐藏切换键） */
 function canRotate() {
@@ -3060,8 +3237,8 @@ __def("src/ui/play.js", function (require, module, exports) {
  *   放置后 ⚡自动在行/列打 X；全部安置后「呈堂」断案。
  * 状态结构与存档格式（placed/marks/hintsUsed/seconds/done）与 Web 版一致。 */
 const data = require('src/ui/data.js');
-const { theme, themeName, toggleTheme } = require('src/ui/theme.js');
-const { roundRect, hit, fmtTime, wrapText, drawSeal, drawThemeIcon, canRotate, toggleOrientation } = require('src/ui/widgets.js');
+const { theme, themeName, toggleTheme, FONTS } = require('src/ui/theme.js');
+const { roundRect, hit, fmtTime, wrapText, fillPaper, drawToolIcon, drawCinnabarSeal, drawSeal, drawThemeIcon, canRotate, toggleOrientation } = require('src/ui/widgets.js');
 const { createScroll } = require('src/ui/scroll.js');
 const { drawSVG } = require('src/ui/svgmini.js');
 
@@ -3553,7 +3730,7 @@ function createPlayScene(manager, opts) {
    * 断开区域取最底行的最长连续段居中，防止标签落进别的房间。 */
   function drawRoomLabels(c) {
     c.fillStyle = 'rgba(20,20,20,0.78)';
-    c.font = `bold ${Math.max(10, cell * 0.28)}px serif`;
+    c.font = `bold ${Math.max(10, cell * 0.28)}px ${FONTS.kai}`;   // 区域名楷体（公堂视觉）
     c.textAlign = 'center';
     c.textBaseline = 'bottom';
     board.rooms.forEach(room => {
@@ -3689,9 +3866,9 @@ function createPlayScene(manager, opts) {
     ctx.translate(boardX, boardY);
     drawRoomLabels(ctx);
     ctx.restore();
-    // 国风坐标：横轴在棋盘上方，纵轴在左（v3.1 放大字号，小屏易读）
-    ctx.fillStyle = t.fg;
-    ctx.font = 'bold 14px serif';
+    // 国风坐标：横轴在棋盘上方，纵轴在左（楷体描金，公堂视觉系统）
+    ctx.fillStyle = 'rgba(214,182,92,0.95)';
+    ctx.font = `15px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
@@ -3704,51 +3881,47 @@ function createPlayScene(manager, opts) {
 
   function drawToolbar(ctx, t) {
     const tools = [
-      { key: 'x', icon: '✕', label: '排除', zone: 'xBtn' },
-      { key: 'erase', icon: '⌫', label: '擦除', zone: 'eraseBtn' },
-      { key: 'undo', icon: '↩', label: '撤回', zone: 'undoBtn' }
+      { key: 'x', label: '排除', zone: 'xBtn' },
+      { key: 'erase', label: '擦除', zone: 'eraseBtn' },
+      { key: 'undo', label: '撤回', zone: 'undoBtn' }
     ];
-    if (!HINT_OFF) tools.push({ key: 'hint', icon: '💡', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
+    if (!HINT_OFF) tools.push({ key: 'hint', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
     if (LAND) {
-      // 横屏：最右侧竖排功能轨
+      // 横屏：最右侧竖排功能轨（文房圆牌 + 自绘图标）
       let y = toolY;
       tools.forEach(tb => {
-        const rect = { x: toolX, y, w: toolW, h: 40 };
+        const rect = { x: toolX, y, w: toolW, h: 44 };
         const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
-        ctx.fillStyle = active ? t.accent : t.card;
-        roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 8);
-        ctx.fill();
-        ctx.fillStyle = active ? '#f5eeda' : t.fg;
+        ctx.fillStyle = active ? 'rgba(177,58,48,0.18)' : 'rgba(242,236,221,0.10)';
+        ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + 17, 17, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = active ? '#b13a30' : 'rgba(214,182,92,0.55)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + 17, 18, active ? '#b13a30' : t.fg);
+        ctx.font = `10px ${FONTS.kai}`;
+        ctx.fillStyle = active ? '#b13a30' : t.muted;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = '15px sans-serif';
-        ctx.fillText(tb.icon, rect.x + toolW / 2, rect.y + 15);
-        ctx.font = '9px sans-serif';
-        ctx.fillStyle = active ? '#f5eeda' : t.muted;
-        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + 31);
+        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + 37);
         zones[tb.zone] = rect;
-        y += 44;
+        y += 48;
       });
-      // ⚡ 自动 X
-      const ax = { x: toolX, y, w: toolW, h: 40 };
-      ctx.fillStyle = settings.autoX ? t.gold : t.card;
-      roundRect(ctx, ax.x, ax.y, ax.w, ax.h, 8);
-      ctx.fill();
-      ctx.fillStyle = settings.autoX ? '#121510' : t.muted;
-      ctx.font = '15px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚡', ax.x + toolW / 2, ax.y + 20);
+      // 自动排除开关（小印 + 朱叉）
+      const ax = { x: toolX, y, w: toolW, h: 44 };
+      ctx.fillStyle = settings.autoX ? 'rgba(194,162,74,0.22)' : 'rgba(242,236,221,0.10)';
+      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + 22, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = settings.autoX ? '#c2a24a' : 'rgba(214,182,92,0.4)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + 22, 18, settings.autoX ? '#c2a24a' : t.muted);
       zones.autoXBtn = ax;
-      y += 44;
-      // 呈堂
+      y += 52;
+      // 呈堂（朱砂大印；未集齐时淡印）
       const allPlaced = ready && Object.keys(placed).length === n;
-      const sub = { x: toolX, y, w: toolW, h: 52 };
-      ctx.fillStyle = done ? t.ok : (allPlaced ? t.accent : t.card);
-      roundRect(ctx, sub.x, sub.y, sub.w, sub.h, 8);
-      ctx.fill();
-      ctx.fillStyle = allPlaced || done ? '#f5eeda' : t.muted;
-      ctx.font = '15px sans-serif';
-      ctx.fillText(done ? '已破案' : '呈堂', sub.x + toolW / 2, sub.y + 26);
+      const sub = { x: toolX, y, w: toolW, h: 64 };
+      if (!allPlaced && !done) ctx.globalAlpha = 0.45;
+      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + 30, 56, done ? '已破' : '呈堂', -0.05);
+      ctx.globalAlpha = 1;
       zones.submitBtn = sub;
       return;
     }
@@ -3756,39 +3929,39 @@ function createPlayScene(manager, opts) {
     tools.forEach(tb => {
       const rect = { x, y: toolY, w: 46, h: TOOL_H };
       const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
-      ctx.fillStyle = active ? t.accent : t.card;
+      ctx.fillStyle = active ? 'rgba(177,58,48,0.18)' : 'rgba(242,236,221,0.10)';
       roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 8);
       ctx.fill();
-      ctx.fillStyle = active ? '#f5eeda' : t.fg;
+      ctx.strokeStyle = active ? '#b13a30' : 'rgba(214,182,92,0.45)';
+      ctx.lineWidth = 1.1;
+      roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 8);
+      ctx.stroke();
+      drawToolIcon(ctx, tb.key, rect.x + 23, rect.y + 17, 20, active ? '#b13a30' : t.fg);
+      ctx.font = `10px ${FONTS.kai}`;
+      ctx.fillStyle = active ? '#b13a30' : t.muted;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '17px sans-serif';
-      ctx.fillText(tb.icon, rect.x + 23, rect.y + 18);
-      ctx.font = '9px sans-serif';
-      ctx.fillStyle = active ? '#f5eeda' : t.muted;
       ctx.fillText(tb.label, rect.x + 23, rect.y + 36);
       zones[tb.zone] = rect;
       x += 52;
     });
-    // ⚡ 自动 X
+    // 自动排除开关
     const ax = { x, y: toolY, w: 34, h: TOOL_H };
-    ctx.fillStyle = settings.autoX ? t.gold : t.card;
+    ctx.fillStyle = settings.autoX ? 'rgba(194,162,74,0.22)' : 'rgba(242,236,221,0.10)';
     roundRect(ctx, ax.x, ax.y, ax.w, ax.h, 8);
     ctx.fill();
-    ctx.fillStyle = settings.autoX ? '#121510' : t.muted;
-    ctx.font = '15px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('⚡', ax.x + 17, ax.y + TOOL_H / 2);
+    ctx.strokeStyle = settings.autoX ? '#c2a24a' : 'rgba(214,182,92,0.4)';
+    ctx.lineWidth = 1.1;
+    roundRect(ctx, ax.x, ax.y, ax.w, ax.h, 8);
+    ctx.stroke();
+    drawToolIcon(ctx, 'autoX', ax.x + 17, ax.y + TOOL_H / 2, 18, settings.autoX ? '#c2a24a' : t.muted);
     zones.autoXBtn = ax;
-    // 呈堂
+    // 呈堂（朱砂印；未集齐时淡印）
     const allPlaced = ready && Object.keys(placed).length === n;
-    const sub = { x: toolX + toolW - 8 - 96, y: toolY + 3, w: 96, h: TOOL_H - 6 };
-    ctx.fillStyle = done ? t.ok : (allPlaced ? t.accent : t.card);
-    roundRect(ctx, sub.x, sub.y, sub.w, sub.h, 8);
-    ctx.fill();
-    ctx.fillStyle = allPlaced || done ? '#f5eeda' : t.muted;
-    ctx.font = '15px sans-serif';
-    ctx.fillText(done ? '已破案' : '呈堂', sub.x + 48, sub.y + sub.h / 2);
+    const sub = { x: toolX + toolW - 8 - 70, y: toolY - 5, w: 70, h: TOOL_H + 10 };
+    if (!allPlaced && !done) ctx.globalAlpha = 0.45;
+    drawCinnabarSeal(ctx, sub.x + sub.w / 2, sub.y + sub.h / 2, 50, done ? '已破' : '呈堂', -0.05);
+    ctx.globalAlpha = 1;
     zones.submitBtn = sub;
   }
 
@@ -3829,22 +4002,20 @@ function createPlayScene(manager, opts) {
     const cw = boardSide + COORD;              // 与棋盘底边等宽（含纵轴）
     const gx = boardX - COORD;
     const y = TOP_SAFE + HEADER_BAND + 2;
-    ctx.fillStyle = '#e9ddbb';                 // 通用线索用深一档的纸色，与角色卡区分
-    roundRect(ctx, gx, y, cw, generalH - 4, 10);
-    ctx.fill();
+    fillPaper(ctx, gx, y, cw, generalH - 4, 10, '#e7dcc2');   // 通用线索用深一档的宣纸，与角色卡区分
     ctx.strokeStyle = '#2a2620';
     ctx.lineWidth = 1.5;
     roundRect(ctx, gx, y, cw, generalH - 4, 10);
     ctx.stroke();
     ctx.fillStyle = '#9a7526';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = `bold 12px ${FONTS.kai}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('通用线索', gx + 10, y + 8);
     let ly = y + 26;
     lines.forEach(wl => {
       ctx.fillStyle = '#2a2620';
-      ctx.font = '13px sans-serif';   // v3.2 证词字号放大（最高频阅读文本）
+      ctx.font = `bold 13px ${FONTS.song}`;   // 证词宋体加粗（公堂视觉）
       ctx.fillText(wl.text, gx + 10, ly);
       ly += 18;
     });
@@ -3867,22 +4038,20 @@ function createPlayScene(manager, opts) {
     if (LAND) {
       const lines = generalLines();
       const ch = lines.length * 18 + 30;
-      ctx.fillStyle = '#e9ddbb';               // 通用线索用深一档的纸色，与角色卡区分
-      roundRect(ctx, 8, y, cw, ch, 10);
-      ctx.fill();
+      fillPaper(ctx, 8, y, cw, ch, 10, '#e7dcc2');   // 通用线索用深一档的宣纸，与角色卡区分
       ctx.strokeStyle = '#2a2620';
       ctx.lineWidth = 1.5;
       roundRect(ctx, 8, y, cw, ch, 10);
       ctx.stroke();
       ctx.fillStyle = '#9a7526';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${FONTS.kai}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText('通用线索', 18, y + 8);
       let gy = y + 26;
       lines.forEach(wl => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = '13px sans-serif';   // v3.2 证词字号放大（最高频阅读文本）
+        ctx.font = `bold 13px ${FONTS.song}`;   // 证词宋体加粗（公堂视觉）
         ctx.fillText(wl.text, 18, gy);
         gy += 18;
       });
@@ -3896,7 +4065,7 @@ function createPlayScene(manager, opts) {
       });
       if (!pairs.length) return;
       const AV = 44;                            // 头像边长（原 28，月球主题同款放大）
-      ctx.font = '13px sans-serif';
+      ctx.font = `bold 13px ${FONTS.song}`;
       const isPlaced = Object.values(placed).includes(p.id);
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
       const lines = [];
@@ -3904,25 +4073,23 @@ function createPlayScene(manager, opts) {
       const ch = Math.max(66, 10 + AV + 8 + lines.length * 18 + 8);
       // 已放置者卡片底罩灰作区分（深浅主题均可见；透明度调和法在浅色主题下会隐形）；
       // 头像/姓名/性别/证词保持全亮
-      ctx.fillStyle = '#f5eeda';
-      roundRect(ctx, 8, y, cw, ch, 10);
-      ctx.fill();
+      fillPaper(ctx, 8, y, cw, ch, 10, '#f2ecdd');
       if (isPlaced) {
         ctx.fillStyle = 'rgba(80,80,80,0.30)';
         roundRect(ctx, 8, y, cw, ch, 10);
         ctx.fill();
       }
-      ctx.strokeStyle = p.id === selected ? '#b84038' : '#2a2620';
+      ctx.strokeStyle = p.id === selected ? '#b13a30' : '#2a2620';
       ctx.lineWidth = p.id === selected ? 2 : 1.5;
       roundRect(ctx, 8, y, cw, ch, 10);
       ctx.stroke();
       // 头像（大）+ 右下角简称徽章
       drawPortrait(ctx, p, 14, y + 10, AV, AV);
-      ctx.fillStyle = 'rgba(245,238,218,0.95)';
+      ctx.fillStyle = 'rgba(242,236,221,0.95)';
       roundRect(ctx, 14 + AV - 16, y + 10 + AV - 15, 16, 13, 3);
       ctx.fill();
       ctx.fillStyle = '#333';
-      ctx.font = 'bold 10px sans-serif';
+      ctx.font = `bold 10px ${FONTS.kai}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(p.short, 14 + AV - 8, y + 10 + AV - 8.5);
@@ -3930,18 +4097,18 @@ function createPlayScene(manager, opts) {
       const nameX = 14 + AV + 10, nameY = y + 10 + AV / 2;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = p.id === selected ? '#b84038' : '#6b5f3a';
-      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
+      ctx.font = `bold 13px ${FONTS.kai}`;
       const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
       ctx.fillText(namePart, nameX, nameY);
       // 性别符号单独 middle 基线绘制（部分机型符号字体与中文基线不齐，真机曾见下沉错位）
       ctx.fillText(p.gender === 'F' ? '♀' : '♂', nameX + ctx.measureText(namePart).width + 5, nameY);
-      // 证词：头像下方通栏（v3.2 字号放大）
+      // 证词：头像下方通栏（宋体加粗）
       let ly = y + 10 + AV + 8;
       ctx.textBaseline = 'top';
       lines.forEach(s => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = '13px sans-serif';
+        ctx.font = `bold 13px ${FONTS.song}`;
         ctx.fillText(s, 14, ly);
         ly += 18;
       });
@@ -4002,19 +4169,18 @@ function createPlayScene(manager, opts) {
     // 提点卡嵌入角色线索区：同位置同尺寸，文本可滚动，横竖屏一致
     const card = { x: clueX + 8, y: clueBandY, w: clueW - 16, h: clueBandBottom - clueBandY };
     zones.hintCard = card;
-    ctx.fillStyle = t.card;
-    roundRect(ctx, card.x, card.y, card.w, card.h, 12);
-    ctx.fill();
+    fillPaper(ctx, card.x, card.y, card.w, card.h, 12, '#f2ecdd');
     ctx.fillStyle = t.gold;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '15px sans-serif';
+    ctx.font = `16px ${FONTS.kai}`;
     ctx.fillText(steps.length ? `提点 ${idx + 1}/${steps.length}` : '提点', card.x + card.w / 2, card.y + 22);
     // 文本区（超高可滚动）
     const tx = card.x + 16, ty = card.y + 40;
     const tw = card.w - 40, th = card.h - 40 - 46;
-    ctx.font = '13px sans-serif';
-    const lines = wrapRich(ctx, text, tw, '13px sans-serif', 'bold 13px sans-serif');
+    const bodyF = `13px ${FONTS.song}`, bodyB = `bold 13px ${FONTS.song}`;
+    ctx.font = bodyF;
+    const lines = wrapRich(ctx, text, tw, bodyF, bodyB);
     ctx.save();
     ctx.beginPath();
     ctx.rect(tx - 2, ty, tw + 10, th);
@@ -4026,7 +4192,7 @@ function createPlayScene(manager, opts) {
       let x = tx;
       const y = ty + i * 20;
       for (const seg of segs) {
-        ctx.font = seg.b ? 'bold 13px sans-serif' : '13px sans-serif';
+        ctx.font = seg.b ? bodyB : bodyF;
         ctx.fillStyle = seg.b ? t.gold : t.fg;
         ctx.fillText(seg.t, x, y);
         x += ctx.measureText(seg.t).width;
@@ -4076,17 +4242,15 @@ function createPlayScene(manager, opts) {
       ? { x: (W - cw2) / 2, y: 24, w: cw2, h: H - 48 }
       : { x: 24, y: 56, w: cw2, h: H - 128 };
     zones.howtoCard = card;
-    ctx.fillStyle = t.card;
-    roundRect(ctx, card.x, card.y, card.w, card.h, 12);
-    ctx.fill();
+    fillPaper(ctx, card.x, card.y, card.w, card.h, 12, '#f2ecdd');
     ctx.fillStyle = t.gold;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '15px sans-serif';
+    ctx.font = `17px ${FONTS.kai}`;
     ctx.fillText('玩法说明', card.x + card.w / 2, card.y + 22);
     const tx = card.x + 16, ty = card.y + 40;
     const tw = card.w - 32, th = card.h - 40 - 12;
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONTS.song}`;
     let howtoText = data.HOWTO;
     if (board) {
       // 本关器物说明：哪些可坐哪些不可坐（按类型去重）
@@ -4138,7 +4302,7 @@ function createPlayScene(manager, opts) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = t.gold;
-    ctx.font = '18px serif';
+    ctx.font = `18px ${FONTS.kai}`;
     ctx.fillText('本案已破', W / 2, card.y + 44);
     ctx.fillStyle = t.muted;
     ctx.font = '12px sans-serif';
@@ -4173,7 +4337,7 @@ function createPlayScene(manager, opts) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = t.gold;
-    ctx.font = '20px serif';
+    ctx.font = `20px ${FONTS.kai}`;
     ctx.fillText('真相大白！', W / 2, card.y + 68);
     ctx.fillStyle = t.fg;
     ctx.font = '13px sans-serif';
@@ -4253,12 +4417,12 @@ function createPlayScene(manager, opts) {
       ctx.font = '20px sans-serif';
       ctx.fillText('←', 14, hdrY + HEADER_BAND / 2);
       zones.back = { x: 0, y: hdrY, w: 48, h: HEADER_BAND };
-      ctx.font = '13px sans-serif';
+      ctx.font = `15px ${FONTS.kai}`;
       // 标题：优先卷宗卡上的去重案名（主题案名仅 8 个会重名）
       const title = opts.title || (board && board.theme && board.theme.caseName);
       ctx.fillText(title, 44, hdrY + 11);
       // 操作提示小字（常有玩家误把单击标记当放置，常驻提醒）
-      ctx.font = '9px sans-serif';
+      ctx.font = `9px ${FONTS.song}`;
       ctx.fillStyle = t.muted;
       ctx.fillText('单击标记 · 长按放置 · 长按擦除清空全部', 44, hdrY + 25);
       ctx.fillStyle = t.fg;
@@ -4567,8 +4731,8 @@ __def("src/ui/cases.js", function (require, module, exports) {
  * 棋盘缩略图逐张异步生成（getBoard 有缓存，重进秒开）。 */
 const data = require('src/ui/data.js');
 const { createPlayScene } = require('src/ui/play.js');
-const { theme } = require('src/ui/theme.js');
-const { roundRect, hit, fmtTime, drawLockSeal } = require('src/ui/widgets.js');
+const { theme, FONTS } = require('src/ui/theme.js');
+const { roundRect, hit, fmtTime, drawLockSeal, fillPaper } = require('src/ui/widgets.js');
 const { createScroll } = require('src/ui/scroll.js');
 const { drawSVG } = require('src/ui/svgmini.js');
 
@@ -4699,9 +4863,7 @@ function createCasesScene(manager, diff) {
         const y = row * (cardH + GAP) + 6;
         zones.cards.push({ x, y, w: cardW, h: cardH, locked: !unlocked });
 
-        ctx.fillStyle = t.card;
-        roundRect(ctx, x, y, cardW, cardH, 12);
-        ctx.fill();
+        fillPaper(ctx, x, y, cardW, cardH, 12, '#f2ecdd');
 
         const board = boards[i];
         if (board && board !== 'MISS') {
@@ -4710,13 +4872,13 @@ function createCasesScene(manager, diff) {
         } else {
           ctx.fillStyle = t.muted;
           ctx.textAlign = 'center';
-          ctx.font = '12px sans-serif';
+          ctx.font = `12px ${FONTS.song}`;
           ctx.fillText(board === 'MISS' ? '题库待补' : '整理卷宗中…', x + cardW / 2, y + 6 + (cardW - 12) / 2);
         }
 
         ctx.textAlign = 'center';
-        ctx.fillStyle = t.fg;
-        ctx.font = '13px sans-serif';
+        ctx.fillStyle = '#2a2620';
+        ctx.font = `bold 13px ${FONTS.kai}`;
         // 案件名：档内去重后的名字为准（主题案名只 8 个，直接用会重名）
         const displayName = data.caseNameAt(diff, i);
         ctx.fillText(`「${displayName}」`, x + cardW / 2, y + cardW + 22);
@@ -4733,7 +4895,7 @@ function createCasesScene(manager, diff) {
           metaColor = t.gold;
         }
         ctx.fillStyle = metaColor;
-        ctx.font = '11px sans-serif';
+        ctx.font = `11px ${FONTS.song}`;
         ctx.fillText(meta, x + cardW / 2, y + cardW + 42);
 
         if (!unlocked) {
@@ -4764,9 +4926,9 @@ function createCasesScene(manager, diff) {
       ctx.fillStyle = t.fg;
       ctx.font = '20px sans-serif';
       ctx.fillText('←', 16, HEADER_H / 2);
-      ctx.font = '16px sans-serif';
+      ctx.font = `17px ${FONTS.kai}`;
       ctx.fillText(`卷宗 · ${d.label}`, 48, HEADER_H / 2 - 9);
-      ctx.font = '11px sans-serif';
+      ctx.font = `11px ${FONTS.song}`;
       ctx.fillStyle = t.muted;
       ctx.fillText(`${d.size}×${d.size} · ${d.size - 1} 名嫌疑人 · 1 名被害者`, 48, HEADER_H / 2 + 11);
     },
@@ -4800,8 +4962,8 @@ __def("src/ui/home.js", function (require, module, exports) {
  * 弹层（玩法说明）在场景内以模态绘制；zones 暴露给冒烟测试。 */
 const data = require('src/ui/data.js');
 const { createPlayScene } = require('src/ui/play.js');
-const { theme, themeName, toggleTheme } = require('src/ui/theme.js');
-const { roundRect, hit, drawSeal, drawLockSeal, wrapText, drawButton, drawThemeIcon, canRotate, toggleOrientation, fmtTime } = require('src/ui/widgets.js');
+const { theme, themeName, toggleTheme, FONTS } = require('src/ui/theme.js');
+const { roundRect, hit, drawSeal, drawLockSeal, wrapText, fillPaper, drawButton, drawThemeIcon, canRotate, toggleOrientation, fmtTime } = require('src/ui/widgets.js');
 const { createScroll } = require('src/ui/scroll.js');
 
 const HOWTO = data.HOWTO;
@@ -4847,12 +5009,10 @@ function renderHowtoModal(ctx, t, W, H, zones, modalScroll) {
   ctx.fillRect(0, 0, W, H);
   const card = { x: 24, y: 56, w: W - 48, h: H - 128 };
   zones.modalCard = card;
-  ctx.fillStyle = t.card;
-  roundRect(ctx, card.x, card.y, card.w, card.h, 14);
-  ctx.fill();
+  fillPaper(ctx, card.x, card.y, card.w, card.h, 14, '#f2ecdd');
   ctx.fillStyle = t.gold;
   ctx.textAlign = 'center';
-  ctx.font = '17px sans-serif';
+  ctx.font = `19px ${FONTS.kai}`;
   ctx.fillText('玩法说明', W / 2, card.y + 30);
 
   const bodyX = card.x + 20, bodyY = card.y + 52;
@@ -4864,8 +5024,8 @@ function renderHowtoModal(ctx, t, W, H, zones, modalScroll) {
   ctx.translate(0, -modalScroll.offset);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = '13px sans-serif';
-  ctx.fillStyle = t.fg;
+  ctx.font = `13px ${FONTS.song}`;
+  ctx.fillStyle = '#2a2620';
   const lines = wrapText(ctx, HOWTO, bodyW);
   let ly = bodyY;
   lines.forEach(line => {
@@ -4920,9 +5080,9 @@ function createHomeScene(manager) {
       ctx.fillStyle = t.fg;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '26px serif';
+      ctx.font = `30px ${FONTS.kai}`;
       ctx.fillText('墨 案 缉 凶', CW / 2, sealY + 150);
-      ctx.font = '12px sans-serif';
+      ctx.font = `12px ${FONTS.song}`;
       ctx.fillStyle = t.muted;
       ctx.fillText('南宋公案推理 —— 提刑官勘验现场，依证词断案缉凶', CW / 2, sealY + 180);
 
@@ -5009,7 +5169,7 @@ function createThemeScene(manager) {
       zones.themeCards = [];
       data.themeLadders().forEach(th => {
         const info = themeInfo(th);
-        ctx.font = '11px sans-serif';
+        ctx.font = `11px ${FONTS.song}`;
         const objLines = wrapText(ctx, `器物：${info.objs}`, CW - 96);
         const roomLines = wrapText(ctx, `区域：${info.rooms}`, CW - 96);
         const cardH = 30 + objLines.length * 16 + roomLines.length * 16 + 14;
@@ -5018,23 +5178,21 @@ function createThemeScene(manager) {
           const p = L.Storage.getProgress(c.seed);
           return p && p.done;
         }).length;
-        ctx.fillStyle = t.card;
-        roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 12);
-        ctx.fill();
+        fillPaper(ctx, rect.x, rect.y, rect.w, rect.h, 12, '#f2ecdd');
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = t.gold;
-        ctx.font = '15px sans-serif';
+        ctx.fillStyle = '#9a7526';
+        ctx.font = `bold 15px ${FONTS.kai}`;
         ctx.fillText(`【${th.name}】${th.caseName}`, rect.x + 14, rect.y + 16);
         ctx.textAlign = 'right';
         ctx.fillStyle = doneCount ? t.ok : t.muted;
-        ctx.font = '11px sans-serif';
+        ctx.font = `11px ${FONTS.song}`;
         ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14, rect.y + 16);
         ctx.textAlign = 'left';
-        ctx.fillStyle = t.fg;
+        ctx.fillStyle = '#2a2620';
         let ly = rect.y + 30 + 8;
         objLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 16; });
-        ctx.fillStyle = t.muted;
+        ctx.fillStyle = '#6b5f3a';
         roomLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 16; });
         zones.themeCards.push(rect);
         y += cardH + 12;
@@ -5050,7 +5208,7 @@ function createThemeScene(manager) {
       ctx.fillStyle = t.fg;
       ctx.font = '20px sans-serif';
       ctx.fillText('←', 14, headerTop(W, H) + 26);
-      ctx.font = '15px sans-serif';
+      ctx.font = `17px ${FONTS.kai}`;
       ctx.fillText('选择案发地', 44, headerTop(W, H) + 26);
 
       if (modal === 'howto') renderHowtoModal(ctx, t, W, H, zones, modalScroll);
