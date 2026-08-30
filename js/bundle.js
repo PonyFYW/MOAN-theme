@@ -3781,6 +3781,21 @@ function createPlayScene(manager, opts) {
 
   function drawBoard(ctx, t) {
     if (cacheVer !== data.imageVersion()) rebuildBoardCache();
+    // 装裱框（公堂视觉：深色绫绢 + 金线内衬；仅横屏大画布加，竖屏保持满幅）
+    if (LAND) {
+      const fp = 22;
+      ctx.fillStyle = '#241d12';
+      roundRect(ctx, boardX - fp, boardY - fp, boardSide + fp * 2, boardSide + fp * 2, 6);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(231,220,194,0.35)';
+      ctx.lineWidth = 4;
+      roundRect(ctx, boardX - fp + 5, boardY - fp + 5, boardSide + fp * 2 - 10, boardSide + fp * 2 - 10, 4);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, boardX - fp + 9, boardY - fp + 9, boardSide + fp * 2 - 18, boardSide + fp * 2 - 18, 3);
+      ctx.stroke();
+    }
     // 静态层（离屏缓存一次绘入，避免每帧逐格重绘）
     if (boardCache) {
       ctx.drawImage(boardCache, boardX, boardY, boardSide, boardSide);
@@ -4032,7 +4047,18 @@ function createPlayScene(manager, opts) {
 
     zones.clueCards = [];
     let y = 2;
-    const cw = clueW - 16;
+
+    // 横屏：案卷=整栏宣纸底 + 右侧竖排「證詞」（公堂视觉；卡片让出右侧竖条）
+    const strip = LAND ? 30 : 0;
+    if (LAND) {
+      fillPaper(ctx, 0, 0, clueW, clueBandBottom - clueBandY, 4, '#f2ecdd');
+      ctx.fillStyle = '#b13a30';
+      ctx.font = `22px ${FONTS.kai}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      '證詞'.split('').forEach((ch, i) => ctx.fillText(ch, clueW - 17, 14 + i * 30));
+    }
+    const cw = clueW - 16 - strip;
 
     // 横屏：通用线索卡并入列表首位
     if (LAND) {
@@ -4051,70 +4077,92 @@ function createPlayScene(manager, opts) {
       let gy = y + 26;
       lines.forEach(wl => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = `bold 13px ${FONTS.song}`;   // 证词宋体加粗（公堂视觉）
+        ctx.font = `bold 13px ${FONTS.song}`;
         ctx.fillText(wl.text, 18, gy);
         gy += 18;
       });
       y += ch + 6;
     }
-    // 逐人卡（参照月球主题排布：头像放大居上，姓名/性别同行，证词在头像下方通栏）；整卡点按选人
+
+    /* 嫌疑人卡：Murdoku 式三列网格（上头像 / 中姓名 / 下线索；一行三人）。
+     * 先按行分组求行高（行内底对齐），再逐卡绘制。 */
+    const COLS = 3, GAP = 8;
+    const cardW = (cw - (COLS - 1) * GAP) / COLS;
+    const AV = LAND ? 52 : Math.round(cardW * 0.44);
+    const nameFs = LAND ? 15 : 13;
+    const clueFs = LAND ? 13 : 11;
+    const lineH = clueFs + 4;
+    const peopleCards = [];
     board.people.forEach(p => {
       const pairs = [];
       board.clues.forEach((clue, i) => {
         if (!GENERAL_TYPES.has(clue.type) && clue.p === p.id) pairs.push([clue, i]);
       });
       if (!pairs.length) return;
-      const AV = 44;                            // 头像边长（原 28，月球主题同款放大）
-      ctx.font = `bold 13px ${FONTS.song}`;
-      const isPlaced = Object.values(placed).includes(p.id);
+      ctx.font = `bold ${clueFs}px ${FONTS.song}`;
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
-      const lines = [];
-      wrapText(ctx, text, cw - 28).forEach(s => lines.push(s));
-      const ch = Math.max(66, 10 + AV + 8 + lines.length * 18 + 8);
-      // 已放置者卡片底罩灰作区分（深浅主题均可见；透明度调和法在浅色主题下会隐形）；
-      // 头像/姓名/性别/证词保持全亮
-      fillPaper(ctx, 8, y, cw, ch, 10, '#f2ecdd');
-      if (isPlaced) {
-        ctx.fillStyle = 'rgba(80,80,80,0.30)';
-        roundRect(ctx, 8, y, cw, ch, 10);
-        ctx.fill();
-      }
-      ctx.strokeStyle = p.id === selected ? '#b13a30' : '#2a2620';
-      ctx.lineWidth = p.id === selected ? 2 : 1.5;
-      roundRect(ctx, 8, y, cw, ch, 10);
-      ctx.stroke();
-      // 头像（大）+ 右下角简称徽章
-      drawPortrait(ctx, p, 14, y + 10, AV, AV);
-      ctx.fillStyle = 'rgba(242,236,221,0.95)';
-      roundRect(ctx, 14 + AV - 16, y + 10 + AV - 15, 16, 13, 3);
-      ctx.fill();
-      ctx.fillStyle = '#333';
-      ctx.font = `bold 10px ${FONTS.kai}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(p.short, 14 + AV - 8, y + 10 + AV - 8.5);
-      // 姓名 + 简称 + 性别：与头像同行、垂直居中（被害者标明身份；简称对应棋盘批注字母）
-      const nameX = 14 + AV + 10, nameY = y + 10 + AV / 2;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
-      ctx.font = `bold 13px ${FONTS.kai}`;
-      const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
-      ctx.fillText(namePart, nameX, nameY);
-      // 性别符号单独 middle 基线绘制（部分机型符号字体与中文基线不齐，真机曾见下沉错位）
-      ctx.fillText(p.gender === 'F' ? '♀' : '♂', nameX + ctx.measureText(namePart).width + 5, nameY);
-      // 证词：头像下方通栏（宋体加粗）
-      let ly = y + 10 + AV + 8;
-      ctx.textBaseline = 'top';
-      lines.forEach(s => {
-        ctx.fillStyle = '#2a2620';
-        ctx.font = `bold 13px ${FONTS.song}`;
-        ctx.fillText(s, 14, ly);
-        ly += 18;
-      });
-      zones.clueCards.push({ x: 8, y, w: cw, h: ch, p: p.id });
-      y += ch + 6;
+      const lines = wrapText(ctx, text, cardW - 12);
+      const cardH = 8 + AV + 5 + (nameFs + 5) + 4 + lines.length * lineH + 8;
+      peopleCards.push({ p, lines, cardH });
     });
+    for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
+      const rowCards = peopleCards.slice(r0, r0 + COLS);
+      const rowH = Math.max(...rowCards.map(c => c.cardH));
+      rowCards.forEach((cd, ci) => {
+        const p = cd.p;
+        const x = 8 + ci * (cardW + GAP);
+        const isPlaced = Object.values(placed).includes(p.id);
+        // 卡面（宣纸）+ 已放置罩灰 + 选中朱砂描边
+        fillPaper(ctx, x, y, cardW, rowH, 8, '#f2ecdd');
+        if (isPlaced) {
+          ctx.fillStyle = 'rgba(80,80,80,0.30)';
+          roundRect(ctx, x, y, cardW, rowH, 8);
+          ctx.fill();
+        }
+        ctx.strokeStyle = p.id === selected ? '#b13a30' : 'rgba(42,36,26,0.55)';
+        ctx.lineWidth = p.id === selected ? 2 : 1;
+        roundRect(ctx, x, y, cardW, rowH, 8);
+        ctx.stroke();
+        // 上：头像居中 + 右下角简称徽章
+        const avX = x + (cardW - AV) / 2, avY = y + 8;
+        drawPortrait(ctx, p, avX, avY, AV, AV);
+        ctx.fillStyle = 'rgba(242,236,221,0.95)';
+        roundRect(ctx, avX + AV - 17, avY + AV - 16, 17, 14, 3);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.font = `bold 10px ${FONTS.kai}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.short, avX + AV - 8.5, avY + AV - 9);
+        // 中：姓名+性别整体居中（被害者标明身份）
+        const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
+        ctx.font = `bold ${nameFs}px ${FONTS.kai}`;
+        const nameW = ctx.measureText(namePart).width;
+        const gW = 16;
+        let gx = x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2;
+        gx = Math.max(x + 4, gx);   // 被害者长名放不下时靠左不溢出
+        const gy = avY + AV + 5 + (nameFs + 5) / 2;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
+        ctx.fillText(namePart, gx, gy);
+        if (!p.isVictim) {
+          ctx.fillStyle = p.gender === 'F' ? '#b13a30' : '#33465a';
+          ctx.fillText(p.gender === 'F' ? '♀' : '♂', gx + nameW + 4, gy);
+        }
+        // 下：线索（宋体加粗）
+        let ly = avY + AV + 5 + (nameFs + 5) + 4;
+        ctx.textBaseline = 'top';
+        ctx.font = `bold ${clueFs}px ${FONTS.song}`;
+        cd.lines.forEach(s => {
+          ctx.fillStyle = '#2a2620';
+          ctx.fillText(s, x + 6, ly);
+          ly += lineH;
+        });
+        zones.clueCards.push({ x, y, w: cardW, h: rowH, p: p.id });
+      });
+      y += rowH + GAP;
+    }
 
     clueScroll.setRange(y, clueBandBottom - clueBandY);
     ctx.restore();
