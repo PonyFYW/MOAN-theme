@@ -3864,6 +3864,21 @@ function createPlayScene(manager, opts) {
         });
       }
     }
+    // 悬浮联动高亮（PC：区域软罩 + 物件格金框）
+    if (ready && hoverPerson >= 0) {
+      ctx.fillStyle = 'rgba(194,162,74,0.14)';
+      hoverRoomCells.forEach(i => {
+        ctx.fillRect(boardX + M.col(i, n) * cell, boardY + M.row(i, n) * cell, cell, cell);
+      });
+      hoverObjCells.forEach(i => {
+        const ox = boardX + M.col(i, n) * cell, oy = boardY + M.row(i, n) * cell;
+        ctx.fillStyle = 'rgba(194,162,74,0.28)';
+        ctx.fillRect(ox, oy, cell, cell);
+        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ox + 1, oy + 1, cell - 2, cell - 2);
+      });
+    }
     // 长按进度环
     if (holdCell >= 0 && !holdFired) {
       const progress = Math.min(1, (Date.now() - holdStart) / HOLD_MS);
@@ -3882,9 +3897,9 @@ function createPlayScene(manager, opts) {
     ctx.translate(boardX, boardY);
     drawRoomLabels(ctx);
     ctx.restore();
-    // 国风坐标：横轴在棋盘上方，纵轴在左（T4 辅助级 14px 楷体描金）
+    // 国风坐标：横轴在棋盘上方，纵轴在左（坐标放大，描金楷体）
     ctx.fillStyle = 'rgba(214,182,92,0.95)';
-    ctx.font = `14px ${FONTS.kai}`;
+    ctx.font = `17px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
@@ -3901,7 +3916,7 @@ function createPlayScene(manager, opts) {
       { key: 'erase', label: '擦除', zone: 'eraseBtn' },
       { key: 'undo', label: '撤回', zone: 'undoBtn' }
     ];
-    if (!HINT_OFF) tools.push({ key: 'hint', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
+    // 提点按钮下架（推理链功能保留于 debug/后续入口，工具列不再露出）
     if (LAND) {
       // 横屏：右侧文字工具列（Murdoku 风——纯文字按钮 + 底部呈堂印）
       const labelFs = Math.max(14, Math.round(toolW * 0.16));
@@ -3931,10 +3946,11 @@ function createPlayScene(manager, opts) {
       ctx.textAlign = 'center';
       ctx.fillText(`自动叉${settings.autoX ? '·开' : '·关'}`, ax.x + toolW / 2, ax.y + btnH / 2);
       zones.autoXBtn = ax;
-      // 呈堂（朱砂大印锚定栏底；未集齐时淡印）
+      // 呈堂（朱砂大印紧跟工具组；未集齐时淡印）
+      y += btnH + 16;
       const allPlaced = ready && Object.keys(placed).length === n;
       const sealSize = Math.min(96, Math.round(toolW * 0.86));
-      const sub = { x: toolX, y: clueBandBottom - sealSize - 8, w: toolW, h: sealSize + 8 };
+      const sub = { x: toolX, y, w: toolW, h: sealSize + 8 };
       if (!allPlaced && !done) ctx.globalAlpha = 0.45;
       drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + (sealSize + 6) / 2, sealSize, done ? '已破' : '呈堂', -0.05);
       ctx.globalAlpha = 1;
@@ -4085,7 +4101,7 @@ function createPlayScene(manager, opts) {
       y += ch + 10;
     }
 
-    // 人物卡网格：纯色人物卡 + 独立证词盒（零描边）
+    // 人物卡网格：纯色人物卡 + 独立证词盒（全卡统一高度——Murdoku 同款整齐网格）
     const PADX = 10, GAP = 8;
     const COLS = Math.max(2, Math.min(4, Math.floor((clueW - PADX * 2 + GAP) / 122)));
     const cardW = (clueW - PADX * 2 - (COLS - 1) * GAP) / COLS;
@@ -4103,12 +4119,16 @@ function createPlayScene(manager, opts) {
       ctx.font = `bold ${clueFs}px ${FONTS.song}`;
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
       const lines = wrapText(ctx, text, cardW - 16);
-      peopleCards.push({ p, lines, h: 5 + avSize + nameH + 5 + lines.length * lineH + 12 });
+      peopleCards.push({ p, lines });
     });
-    // 行高分组（行内同高）
+    // 统一尺寸：证词盒高度取全局最大行数，所有卡同高、证词垂直居中
+    const maxLines = Math.max(1, ...peopleCards.map(c => c.lines.length));
+    const boxH = maxLines * lineH + 12;
+    const uniH = 5 + avSize + nameH + 5 + boxH;
+    // 行绘制（全局统一高度 uniH；行内同高）
     for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
       const rowCards = peopleCards.slice(r0, r0 + COLS);
-      const rowH = Math.max(...rowCards.map(c => c.h));
+      const rowH = uniH;
       rowCards.forEach((cd, ci) => {
         const p = cd.p;
         const x = PADX + ci * (cardW + GAP);
@@ -4120,12 +4140,12 @@ function createPlayScene(manager, opts) {
         roundRect(ctx, x, y, cardW, 5 + avSize + nameH, 10);
         ctx.fill();
         drawPortrait(ctx, p, x + 5, y + 5, avSize, avSize);
-        // 简称小字（压头像左下；棋盘批注同源）
+        // 简称（压头像左下，放大；棋盘批注同源）
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillStyle = 'rgba(20,16,10,0.55)';
-        ctx.font = `bold 10px ${FONTS.kai}`;
-        ctx.fillText(p.short, x + 8, y + 5 + avSize - 13);
+        ctx.fillStyle = 'rgba(20,16,10,0.72)';
+        ctx.font = `bold 14px ${FONTS.kai}`;
+        ctx.fillText(p.short, x + 8, y + 5 + avSize - 18);
         // 姓名（色卡底条、居中）
         ctx.fillStyle = 'rgba(20,16,10,0.88)';
         ctx.font = `bold ${LAND ? 17 : 14}px ${FONTS.kai}`;
@@ -4156,18 +4176,23 @@ function createPlayScene(manager, opts) {
           ctx.lineWidth = 2.5;
           roundRect(ctx, x, y, cardW, 5 + avSize + nameH, 10);
           ctx.stroke();
+        } else if (p.id === hoverPerson) {
+          // PC 悬浮：金箔描边高亮（impeccable 式 hover 反馈）
+          ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+          ctx.lineWidth = 2;
+          roundRect(ctx, x - 2, y - 2, cardW + 4, 5 + avSize + nameH + 4, 11);
+          ctx.stroke();
         }
         ctx.restore();
-        // —— 独立证词盒（暗底浅字；文字块整体水平居中，修错位） ——
+        // —— 独立证词盒（暗底浅字；文字整体居中且垂直居中） ——
         const boxY = y + 5 + avSize + nameH + 5;
-        const boxH = cd.lines.length * lineH + 12;
         ctx.fillStyle = '#3a3428';
         roundRect(ctx, x, boxY, cardW, boxH, 8);
         ctx.fill();
         ctx.font = `bold ${clueFs}px ${FONTS.song}`;
         const maxW = Math.max(...cd.lines.map(s => ctx.measureText(s).width));
         const tx = x + Math.max(8, (cardW - maxW) / 2);
-        let ly = boxY + 7;
+        let ly = boxY + 6 + (boxH - 12 - cd.lines.length * lineH) / 2 + 1;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         cd.lines.forEach(s => {
@@ -4437,6 +4462,42 @@ function createPlayScene(manager, opts) {
   /* ================================================================
      场景接口
      ================================================================ */
+  // PC 悬浮：角色卡高亮 + 线索联动（物件格/区域格）高亮（impeccable 式即时反馈）
+  let hoverPerson = -1;
+  let hoverRoomCells = new Set();
+  let hoverObjCells = new Set();
+  if (typeof wx !== 'undefined' && wx.onHover) {
+    wx.onHover(e => {
+      const t0 = e.touches && e.touches[0];
+      let hp = -1;
+      if (t0 && ready && zones.clueCards) {
+        const hx = t0.clientX - clueX;
+        const hy = t0.clientY + clueScroll.offset - clueBandY;
+        for (const z of zones.clueCards) {
+          if (hit(z, hx, hy)) { hp = z.p; break; }
+        }
+      }
+      if (hp !== hoverPerson) {
+        hoverPerson = hp;
+        hoverRoomCells = new Set();
+        hoverObjCells = new Set();
+        if (hp >= 0) {
+          board.clues.forEach(clue => {
+            if (clue.p !== hp) return;
+            const addObj = k => board.objects.forEach(o => {
+              if (o.key === k) { hoverObjCells.add(o.cell); if (o.span === 2) hoverObjCells.add(o.cell + 1); }
+            });
+            if (clue.objKey) addObj(clue.objKey);
+            if (clue.objKeys) clue.objKeys.forEach(addObj);
+            if (clue.room !== undefined) {
+              for (let i = 0; i < n * n; i++) if (board.roomAt[i] === clue.room) hoverRoomCells.add(i);
+            }
+          });
+        }
+        manager.invalidate();
+      }
+    });
+  }
   // PC 端：右键 = 对格打/撤排除叉（不切当前工具；单槽注册，换场景自动覆盖）
   if (typeof wx !== 'undefined' && wx.onContextMenu) {
     wx.onContextMenu(e => {

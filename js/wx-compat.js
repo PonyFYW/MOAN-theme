@@ -51,7 +51,10 @@
       return { touches: isEnd ? [] : [t], changedTouches: [t] };
     }
     canvas.addEventListener('mousedown', function (e) { down = true; fire('start', mouseEv(e, false)); });
-    canvas.addEventListener('mousemove', function (e) { if (down) fire('move', mouseEv(e, false)); });
+    canvas.addEventListener('mousemove', function (e) {
+      if (down) fire('move', mouseEv(e, false));
+      else if (cbs.hover) cbs.hover(mouseEv(e, false));   // PC 悬浮（卡片高亮/联动高亮）
+    });
     window.addEventListener('mouseup', function (e) { if (down) { down = false; fire('end', mouseEv(e, true)); } });
   }
 
@@ -71,6 +74,8 @@
     onTouchCancel: function (fn) { cbs.cancel.push(fn); },
     /* 右键（contextmenu）：单槽回调，play 场景注册"右键=排除叉" */
     onContextMenu: function (fn) { cbs.context = fn; },
+    /* 鼠标悬浮（PC）：单槽回调，play 场景注册卡片/棋盘联动高亮 */
+    onHover: function (fn) { cbs.hover = fn; },
     /* 窗口尺寸变化（旋转/拖窗口）：回报画布 CSS 尺寸（已扣除安全区） */
     onWindowResize: function (fn) {
       window.addEventListener('resize', function () {
