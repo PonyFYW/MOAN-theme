@@ -2615,11 +2615,12 @@ const PALETTES = {
   }
 };
 
-/* 字体栈（P1 先走系统字体：Windows KaiTi / macOS STKaiti / 宋体兜底；
- * webfont 子集内联（马善政/落霞文楷 + Noto Serif SC）留作后续增强项——Android 无楷体时会回落默认黑体 */
+/* 字体栈：
+ * kai  = 风格化字（案名/栏头/卡片姓名/印章/区域名/坐标）
+ * song = 功能正文统一微软雅黑（证词/通用线索/按钮/说明/弹层；非 Windows 设备回退苹方/Noto Sans SC） */
 const FONTS = {
   kai: '"KaiTi","STKaiti","Kaiti SC","楷体",serif',
-  song: '"Noto Serif SC","Source Han Serif SC","SimSun","宋体",serif'
+  song: '"Microsoft YaHei","PingFang SC","Noto Sans SC","微软雅黑",sans-serif'
 };
 
 let current = 'dark';
@@ -3918,14 +3919,14 @@ function createPlayScene(manager, opts) {
     ];
     if (!HINT_OFF) tools.push({ key: 'hint', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
     if (LAND) {
-      // 横屏：最右侧竖排功能轨（随轨宽等比：圆牌/图标/标签/呈堂印）
+      // 横屏：最右侧竖排功能轨（随轨宽等比；间距拉开防紧凑，呈堂锚定栏底）
       const circleR = Math.round(toolW * 0.24);
       const iconSize = Math.round(toolW * 0.30);
       const labelFs = Math.max(12, Math.round(toolW * 0.15));
-      const stepY = Math.round(toolW * 0.66);
+      const stepY = Math.round(toolW * 0.8);
       let y = toolY;
       tools.forEach(tb => {
-        const rect = { x: toolX, y, w: toolW, h: stepY - 4 };
+        const rect = { x: toolX, y, w: toolW, h: stepY - 8 };
         const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
         ctx.fillStyle = active ? 'rgba(177,58,48,0.18)' : 'rgba(242,236,221,0.10)';
         ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + circleR, circleR, 0, Math.PI * 2); ctx.fill();
@@ -3941,22 +3942,22 @@ function createPlayScene(manager, opts) {
         zones[tb.zone] = rect;
         y += stepY;
       });
-      // 自动排除开关（小印 + 朱叉）
-      const ax = { x: toolX, y, w: toolW, h: stepY - 4 };
+      // 自动排除开关（与工具组隔开一段）
+      y += Math.round(stepY * 0.35);
+      const ax = { x: toolX, y, w: toolW, h: stepY - 8 };
       ctx.fillStyle = settings.autoX ? 'rgba(194,162,74,0.22)' : 'rgba(242,236,221,0.10)';
-      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + circleR + 6, circleR, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + circleR, circleR, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = settings.autoX ? '#c2a24a' : 'rgba(214,182,92,0.4)';
       ctx.lineWidth = 1.4;
       ctx.stroke();
-      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + circleR + 6, iconSize, settings.autoX ? '#c2a24a' : t.muted);
+      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + circleR, iconSize, settings.autoX ? '#c2a24a' : t.muted);
       zones.autoXBtn = ax;
-      y += stepY + 6;
-      // 呈堂（朱砂大印；未集齐时淡印）
+      // 呈堂（朱砂大印锚定栏底；未集齐时淡印）
       const allPlaced = ready && Object.keys(placed).length === n;
       const sealSize = Math.min(100, Math.round(toolW * 0.86));
-      const sub = { x: toolX, y, w: toolW, h: sealSize + 16 };
+      const sub = { x: toolX, y: clueBandBottom - sealSize - 10, w: toolW, h: sealSize + 10 };
       if (!allPlaced && !done) ctx.globalAlpha = 0.45;
-      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + (sealSize + 8) / 2, sealSize, done ? '已破' : '呈堂', -0.05);
+      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + (sealSize + 6) / 2, sealSize, done ? '已破' : '呈堂', -0.05);
       ctx.globalAlpha = 1;
       zones.submitBtn = sub;
       return;
@@ -4099,9 +4100,9 @@ function createPlayScene(manager, opts) {
       if (!pairs.length) return;
       ctx.font = `bold ${clueFs}px ${FONTS.song}`;
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
-      const lines = wrapText(ctx, text, cardW - 22);
-      // 分层卡：色底头像区(6+AV+4) + 姓名(26) + 证词内衬盒(lines×lineH+10)
-      const cardH = 6 + AV + 4 + 26 + 4 + lines.length * lineH + 10 + 6;
+      const lines = wrapText(ctx, text, cardW - 16);
+      // 简化卡（去色块化）：头像 + 姓名 + 证词平铺，唯一色彩元素=人物色徽章
+      const cardH = 8 + AV + 6 + 26 + 2 + lines.length * lineH + 8;
       peopleCards.push({ p, lines, cardH });
     });
     // 行高分组
@@ -4153,27 +4154,19 @@ function createPlayScene(manager, opts) {
         ctx.lineWidth = p.id === selected ? 2 : 1;
         roundRect(ctx, x, y, cardW, rowH, 8);
         ctx.stroke();
-        // 上：人物色底头像区（色彩信息化：认人不读字；与棋盘批注同色）
-        const zoneH = 6 + AV + 4;
-        ctx.save();
-        roundRect(ctx, x, y, cardW, zoneH + 2, 8);
-        ctx.clip();
-        ctx.globalAlpha = 0.24;
-        ctx.fillStyle = p.color || '#8a8578';
-        ctx.fillRect(x, y, cardW, zoneH + 2);
-        ctx.globalAlpha = 1;
-        ctx.restore();
-        const avX = x + (cardW - AV) / 2, avY = y + 6;
+        // 上：头像（去色块化：无 tint 区，唯一直色元素=人物色徽章）
+        const zoneH = 8 + AV + 4;
+        const avX = x + (cardW - AV) / 2, avY = y + 8;
         drawPortrait(ctx, p, avX, avY, AV, AV);
-        // 简称徽章（人物色文字，呼应棋盘批注）
-        ctx.fillStyle = 'rgba(242,236,221,0.95)';
-        roundRect(ctx, avX + AV - 18, avY + AV - 17, 18, 15, 3);
+        // 简称徽章：实心人物色底 + 白字（全卡唯一色块，认人不读字）
+        ctx.fillStyle = p.color || '#8a8578';
+        roundRect(ctx, avX + AV - 19, avY + AV - 18, 19, 16, 4);
         ctx.fill();
-        ctx.fillStyle = p.color || '#333';
+        ctx.fillStyle = '#f2ecdd';
         ctx.font = `bold 12px ${FONTS.kai}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(p.short, avX + AV - 9, avY + AV - 9.5);
+        ctx.fillText(p.short, avX + AV - 9.5, avY + AV - 10);
         // 中：姓名+性别整体居中（简称已在徽章，不重复；被害者改右上朱砂小签「尸」）
         const namePart = p.name;
         const gW = 16;
@@ -4186,7 +4179,7 @@ function createPlayScene(manager, opts) {
           nameW = ctx.measureText(namePart).width;
         }
         const gx = Math.max(x + 5, x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2);
-        const gy = y + zoneH + 2 + 13;
+        const gy = y + zoneH + 15;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
@@ -4205,18 +4198,13 @@ function createPlayScene(manager, opts) {
           ctx.textAlign = 'center';
           ctx.fillText('尸', x + cardW - 15, y + 13);
         }
-        // 下：证词内衬盒（人卡词卡分层：附件感）
-        const boxX = x + 5, boxY = y + zoneH + 2 + 26, boxW = cardW - 10;
-        const boxH = cd.lines.length * lineH + 10;
-        ctx.fillStyle = '#e7dcc2';
-        roundRect(ctx, boxX, boxY, boxW, boxH, 5);
-        ctx.fill();
-        let ly = boxY + 6;
+        // 下：证词平铺（去内衬盒，直接落在卡面上）
+        let ly = y + zoneH + 26;
         ctx.textBaseline = 'top';
         ctx.font = `bold ${clueFs}px ${FONTS.song}`;
         cd.lines.forEach(s => {
           ctx.fillStyle = '#2a2620';
-          ctx.fillText(s, boxX + 6, ly);
+          ctx.fillText(s, x + 8, ly);
           ly += lineH;
         });
         zones.clueCards.push({ x, y, w: cardW, h: rowH, p: p.id });
