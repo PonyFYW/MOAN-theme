@@ -2606,12 +2606,6 @@ const PALETTES = {
     fg: XUAN, muted: '#9a8f74', faint: '#6b6250',
     accent: CINNABAR, gold: GOLD, ok: '#7ec97e', dim: 'rgba(0,0,0,0.62)',
     ink: INK, xuan: XUAN, xuanD: XUAN_D, indigo: INDIGO
-  },
-  light: {
-    bg: '#f2eee2', card: '#faf5e8', cardEdge: '#ddd5c0',
-    fg: '#2a2620', muted: '#8a8064', faint: '#a39b7e',
-    accent: CINNABAR, gold: '#9a7526', ok: '#3e8e4e', dim: 'rgba(60,55,40,0.45)',
-    ink: INK, xuan: XUAN, xuanD: XUAN_D, indigo: INDIGO
   }
 };
 
@@ -2623,14 +2617,13 @@ const FONTS = {
   song: '"Microsoft YaHei","PingFang SC","Noto Sans SC","微软雅黑",sans-serif'
 };
 
-let current = 'dark';
+const current = 'dark';   // 仅深色模式（浅色模式已下线）
 
-function setTheme(name) { if (PALETTES[name]) current = name; }
+function setTheme() { /* 兼容旧调用：永远深色 */ }
 function theme() { return PALETTES[current]; }
 function themeName() { return current; }
-function toggleTheme() { current = current === 'light' ? 'dark' : 'light'; return current; }
 
-module.exports = { setTheme, theme, themeName, toggleTheme, FONTS, INK, XUAN, XUAN_D, CINNABAR, INDIGO, GOLD };
+module.exports = { setTheme, theme, themeName, FONTS, INK, XUAN, XUAN_D, CINNABAR, INDIGO, GOLD };
 
 });
 __def("src/ui/widgets.js", function (require, module, exports) {
@@ -3238,8 +3231,8 @@ __def("src/ui/play.js", function (require, module, exports) {
  *   放置后 ⚡自动在行/列打 X；全部安置后「呈堂」断案。
  * 状态结构与存档格式（placed/marks/hintsUsed/seconds/done）与 Web 版一致。 */
 const data = require('src/ui/data.js');
-const { theme, themeName, toggleTheme, FONTS } = require('src/ui/theme.js');
-const { roundRect, hit, fmtTime, wrapText, fillPaper, drawToolIcon, drawCinnabarSeal, drawSeal, drawThemeIcon, canRotate, toggleOrientation } = require('src/ui/widgets.js');
+const { theme, FONTS } = require('src/ui/theme.js');
+const { roundRect, hit, fmtTime, wrapText, fillPaper, drawToolIcon, drawCinnabarSeal, drawSeal, canRotate, toggleOrientation } = require('src/ui/widgets.js');
 const { createScroll } = require('src/ui/scroll.js');
 const { drawSVG } = require('src/ui/svgmini.js');
 
@@ -4014,15 +4007,17 @@ function createPlayScene(manager, opts) {
     } else {
       drawSVG(ctx, L.Art.avatarSVG(p.avatar), x + cell * 0.04, y + cell * 0.04, cell * 0.92, cell * 0.92);
     }
-    const bfs = Math.max(12, cell * 0.15);
-    ctx.fillStyle = 'rgba(242,236,221,0.92)';
-    roundRect(ctx, x + 2, y + 2, bfs + 7, bfs + 5, 3);
-    ctx.fill();
-    ctx.fillStyle = p.color || '#333';   // 徽章文字随人物色（与批注/卡片呼应）
+    // 简称：粗体描边字（无背景框，人物色填充）
+    const bfs = Math.max(13, cell * 0.17);
     ctx.font = `bold ${bfs}px ${FONTS.kai}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(p.short, x + 2 + (bfs + 7) / 2, y + 2 + (bfs + 5) / 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2.5, bfs * 0.22);
+    ctx.strokeStyle = 'rgba(20,18,14,0.85)';
+    ctx.strokeText(p.short, x + 3, y + 2);
+    ctx.fillStyle = p.color || '#f2ecdd';
+    ctx.fillText(p.short, x + 3, y + 2);
   }
 
   /* 工笔头像（webp）优先，未加载完成回退参数化 SVG */
@@ -4138,13 +4133,14 @@ function createPlayScene(manager, opts) {
         const p = cd.p;
         const x = PADX + ci * (cardW + GAP);
         const isPlaced = Object.values(placed).includes(p.id);
-        // —— 人物纯色卡（色即身份；已放置整体压暗） ——
+        // —— 人物纯色卡（色即身份；已放置仅色卡与头像压暗，姓名/性别/简称保持全亮） ——
         ctx.save();
         if (isPlaced) ctx.globalAlpha = 0.38;
         ctx.fillStyle = p.color || '#8a8578';
         roundRect(ctx, x, y, cardW, 5 + avSize + nameH, 10);
         ctx.fill();
         drawPortrait(ctx, p, x + 5, y + 5, avSize, avSize);
+        ctx.globalAlpha = 1;
         // 简称牌（墨底描金小牌，加大加粗；棋盘批注同源）
         const bw = 26, bh = 20, bx = x + 6, by = y + 5 + avSize - 24;
         ctx.fillStyle = 'rgba(22,19,16,0.82)';
@@ -4542,37 +4538,49 @@ function createPlayScene(manager, opts) {
       ctx.fillStyle = t.bg;
       ctx.fillRect(0, 0, W, H);
 
-      // 头部：返回+案名靠最顶（竖屏对齐胶囊高度，利用胶囊左侧空区）；右侧控件群竖屏低于胶囊、横屏靠顶
+      // 头部：返回（圆框箭头钮）+ 案名靠最顶；右侧控件群竖屏低于胶囊、横屏靠顶
       const hdrY = (W > H) ? HDR_TOP
         : (capsule && capsule.height ? capsule.top + Math.max(0, (capsule.height - HEADER_BAND) / 2) : 10);
       const hdrYCtl = (W > H) ? HDR_TOP : TOP_SAFE;
+      // 返回钮：圆框 + 粗箭头（导航控件统一为按钮语义，不再是裸字符）
+      const backC = { x: 12, y: hdrY + 2, w: 30, h: 30 };
+      ctx.strokeStyle = t.muted;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(backC.x + 15, backC.y + 15, 14, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = t.fg;
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(backC.x + 18, backC.y + 8);
+      ctx.lineTo(backC.x + 10, backC.y + 15);
+      ctx.lineTo(backC.x + 18, backC.y + 22);
+      ctx.stroke();
+      zones.back = { x: 0, y: hdrY, w: 48, h: HEADER_BAND };
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = t.fg;
-      ctx.font = '20px sans-serif';
-      ctx.fillText('←', 14, hdrY + HEADER_BAND / 2);
-      zones.back = { x: 0, y: hdrY, w: 48, h: HEADER_BAND };
       ctx.font = `bold 18px ${FONTS.kai}`;   // T2 标题级：案名
       // 标题：优先卷宗卡上的去重案名（主题案名仅 8 个会重名）
       const title = opts.title || (board && board.theme && board.theme.caseName);
-      ctx.fillText(title, 44, hdrY + 7);
+      ctx.fillText(title, 52, hdrY + 7);
       // 操作提示小字（常有玩家误把单击标记当放置，常驻提醒；与案名拉开间距）
       ctx.font = `10px ${FONTS.song}`;
       ctx.fillStyle = t.muted;
-      ctx.fillText('单击标记 · 长按放置 · 长按擦除清空全部', 44, hdrY + 28);
+      ctx.fillText('单击标记 · 长按放置 · 长按擦除清空全部', 52, hdrY + 28);
       ctx.fillStyle = t.fg;
-      // 右侧控件群（2 区）：主题 ← 切换 ← 计时，间距明确；横屏时收在胶囊左缘以内
+      // 右侧控件群：玩法 → 切换 → 计时（横屏时收在胶囊左缘以内；浅色模式已下线，无主题钮）
       const hdrRight = (LAND && capsule && capsule.left) ? capsule.left - 8 : W - 8;
       ctx.textAlign = 'center';
-      ctx.font = '15px sans-serif';
-      drawThemeIcon(ctx, hdrRight - 18, hdrYCtl + HEADER_BAND / 2, 11, themeName() === 'light', t.fg, t.bg);
-      zones.themeBtn = { x: hdrRight - 34, y: hdrYCtl + 2, w: 32, h: 32 };
-      // 玩法说明入口（关卡内随时查术语/手法）
-      zones.howtoBtn = { x: hdrRight - 76, y: hdrYCtl + 2, w: 32, h: 32 };
+      // 玩法说明入口（圆框 ? 钮，关卡内随时查术语/手法）
+      zones.howtoBtn = { x: hdrRight - 40, y: hdrYCtl + 2, w: 32, h: 32 };
+      ctx.strokeStyle = t.muted;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(hdrRight - 24, hdrYCtl + 17, 14, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = t.muted;
-      ctx.font = '16px sans-serif';
-      ctx.fillText('？', hdrRight - 60, hdrYCtl + HEADER_BAND / 2);
-      const rotX = hdrRight - 76 - 10 - 40;
+      ctx.font = `bold 15px ${FONTS.song}`;
+      ctx.fillText('?', hdrRight - 24, hdrYCtl + 18);
+      const rotX = hdrRight - 40 - 12 - 40;
       if (canRotate()) {
         zones.rotateBtn = { x: rotX, y: hdrYCtl + 4, w: 40, h: 28 };
         ctx.strokeStyle = t.muted;
@@ -4583,10 +4591,17 @@ function createPlayScene(manager, opts) {
         ctx.font = '11px sans-serif';
         ctx.fillText(LAND ? '竖屏' : '横屏', rotX + 20, hdrYCtl + HEADER_BAND / 2);
       }
-      ctx.textAlign = 'right';
-      ctx.font = '13px monospace';
+      // 计时器：墨色小牌 + 等宽数字（tabular）
+      const timeStr = fmtTime(seconds);
+      ctx.font = 'bold 13px monospace';
+      const timeW = ctx.measureText(timeStr).width + 18;
+      const timeX = rotX - 12 - timeW;
+      ctx.fillStyle = 'rgba(242,236,221,0.08)';
+      roundRect(ctx, timeX, hdrYCtl + 6, timeW, 24, 7);
+      ctx.fill();
       ctx.fillStyle = t.muted;
-      ctx.fillText(fmtTime(seconds), rotX - 10, hdrYCtl + HEADER_BAND / 2);
+      ctx.textAlign = 'center';
+      ctx.fillText(timeStr, timeX + timeW / 2, hdrYCtl + 18);
 
       if (!ready) {
         ctx.textAlign = 'center';
@@ -4675,12 +4690,6 @@ function createPlayScene(manager, opts) {
         return;
       }
       if (hit(zones.back, x, y)) { manager.back(); return; }
-      if (hit(zones.themeBtn, x, y)) {
-        settings.theme = toggleTheme();
-        L.Storage.saveSettings(settings);
-        manager.invalidate();
-        return;
-      }
       if (zones.rotateBtn && hit(zones.rotateBtn, x, y)) {
         toggleOrientation(W, H);
         return;
@@ -5099,8 +5108,8 @@ __def("src/ui/home.js", function (require, module, exports) {
  * 弹层（玩法说明）在场景内以模态绘制；zones 暴露给冒烟测试。 */
 const data = require('src/ui/data.js');
 const { createPlayScene } = require('src/ui/play.js');
-const { theme, themeName, toggleTheme, FONTS } = require('src/ui/theme.js');
-const { roundRect, hit, drawSeal, drawLockSeal, wrapText, fillPaper, drawButton, drawThemeIcon, canRotate, toggleOrientation, fmtTime } = require('src/ui/widgets.js');
+const { theme, FONTS } = require('src/ui/theme.js');
+const { roundRect, hit, drawSeal, drawLockSeal, wrapText, fillPaper, drawButton, canRotate, toggleOrientation, fmtTime } = require('src/ui/widgets.js');
 const { createScroll } = require('src/ui/scroll.js');
 
 const HOWTO = data.HOWTO;
@@ -5233,18 +5242,16 @@ function createHomeScene(manager) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = t.fg;
-      const hdrTop = headerTop(W, H);   // 左上角容器与对局页标题同高
-      drawThemeIcon(ctx, 29, hdrTop + 17, 12, themeName() === 'light', t.fg, t.bg);
-      zones.themeBtn = { x: 12, y: hdrTop, w: 34, h: 34 };
+      const hdrTop = headerTop(W, H);   // 左上角容器与对局页标题同高（浅色模式已下线，无主题钮）
       if (canRotate()) {
-        zones.rotateBtn = { x: 52, y: hdrTop + 3, w: 40, h: 28 };
+        zones.rotateBtn = { x: 12, y: hdrTop + 3, w: 40, h: 28 };
         ctx.strokeStyle = t.muted;
         ctx.lineWidth = 1;
-        roundRect(ctx, 52, hdrTop + 3, 40, 28, 6);
+        roundRect(ctx, 12, hdrTop + 3, 40, 28, 6);
         ctx.stroke();
         ctx.fillStyle = t.muted;
         ctx.font = '11px sans-serif';
-        ctx.fillText(W > H ? '竖屏' : '横屏', 72, hdrTop + 17);
+        ctx.fillText(W > H ? '竖屏' : '横屏', 32, hdrTop + 17);
       }
 
       if (modal === 'howto') renderHowtoModal(ctx, t, W, H, zones, modalScroll);
@@ -5253,13 +5260,6 @@ function createHomeScene(manager) {
     onTap(x, y) {
       if (modal === 'howto') {
         if (hit(zones.modalClose, x, y) || !hit(zones.modalCard, x, y)) modal = null;
-        return;
-      }
-      if (hit(zones.themeBtn, x, y)) {
-        const name = toggleTheme();
-        const s = L.Storage.getSettings();
-        s.theme = name;
-        L.Storage.saveSettings(s);
         return;
       }
       if (zones.rotateBtn && hit(zones.rotateBtn, x, y)) {
