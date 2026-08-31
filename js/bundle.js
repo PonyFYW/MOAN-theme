@@ -3286,13 +3286,14 @@ function createPlayScene(manager, opts) {
   }
   function relayout() {
     if (LAND) {
-      // 横屏：左线索列（含通用卡）/ 中棋盘 / 最右侧竖排功能轨（Fitts：主操作区加宽）
-      const RAIL_W = 88;
-      const rightX0 = 8 + Math.min(280, Math.max(220, W * 0.32)) + 12 + COORD;
+      // 横屏：左案卷（随屏加宽）/ 中棋盘 / 最右侧功能轨（随屏放大）
+      const RAIL_W = Math.min(128, Math.max(88, Math.round(W * 0.06)));
+      const clueWpx = Math.min(460, Math.max(280, Math.round(W * 0.24)));   // 案卷随屏加宽（Murdoku 左栏同款弹性）
+      const rightX0 = 8 + clueWpx + 12 + COORD;
       const avail = W - RAIL_W - 8 - 12 - rightX0 - 8;   // 板区可用宽（含框垫，防压功能轨）
       boardSide = Math.min(H - HDR_TOP - HEADER_BAND - COORD - 12, W * 0.68, avail);
       clueX = 8;
-      clueW = Math.min(280, Math.max(220, W * 0.32));   // 案卷收窄，让给棋盘
+      clueW = clueWpx;
       clueBandY = HDR_TOP + HEADER_BAND + 4;
       clueBandBottom = H - 8;
       toolX = W - RAIL_W - 8;
@@ -3917,40 +3918,45 @@ function createPlayScene(manager, opts) {
     ];
     if (!HINT_OFF) tools.push({ key: 'hint', label: `提点·${hintsUsed}`, zone: 'hintBtn' });
     if (LAND) {
-      // 横屏：最右侧竖排功能轨（Fitts 放大：22px 圆牌 + 12px 楷 + 76px 呈堂印）
+      // 横屏：最右侧竖排功能轨（随轨宽等比：圆牌/图标/标签/呈堂印）
+      const circleR = Math.round(toolW * 0.24);
+      const iconSize = Math.round(toolW * 0.30);
+      const labelFs = Math.max(12, Math.round(toolW * 0.15));
+      const stepY = Math.round(toolW * 0.66);
       let y = toolY;
       tools.forEach(tb => {
-        const rect = { x: toolX, y, w: toolW, h: 54 };
+        const rect = { x: toolX, y, w: toolW, h: stepY - 4 };
         const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
         ctx.fillStyle = active ? 'rgba(177,58,48,0.18)' : 'rgba(242,236,221,0.10)';
-        ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + 21, 21, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(rect.x + toolW / 2, rect.y + circleR, circleR, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = active ? '#b13a30' : 'rgba(214,182,92,0.55)';
         ctx.lineWidth = 1.4;
         ctx.stroke();
-        drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + 21, 24, active ? '#b13a30' : t.fg);
-        ctx.font = `13px ${FONTS.kai}`;
+        drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + circleR, iconSize, active ? '#b13a30' : t.fg);
+        ctx.font = `${labelFs}px ${FONTS.kai}`;
         ctx.fillStyle = active ? '#b13a30' : t.muted;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + 46);
+        ctx.fillText(tb.label, rect.x + toolW / 2, rect.y + circleR * 2 + labelFs / 2 + 4);
         zones[tb.zone] = rect;
-        y += 58;
+        y += stepY;
       });
       // 自动排除开关（小印 + 朱叉）
-      const ax = { x: toolX, y, w: toolW, h: 54 };
+      const ax = { x: toolX, y, w: toolW, h: stepY - 4 };
       ctx.fillStyle = settings.autoX ? 'rgba(194,162,74,0.22)' : 'rgba(242,236,221,0.10)';
-      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + 27, 21, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax.x + toolW / 2, ax.y + circleR + 6, circleR, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = settings.autoX ? '#c2a24a' : 'rgba(214,182,92,0.4)';
       ctx.lineWidth = 1.4;
       ctx.stroke();
-      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + 27, 24, settings.autoX ? '#c2a24a' : t.muted);
+      drawToolIcon(ctx, 'autoX', ax.x + toolW / 2, ax.y + circleR + 6, iconSize, settings.autoX ? '#c2a24a' : t.muted);
       zones.autoXBtn = ax;
-      y += 62;
+      y += stepY + 6;
       // 呈堂（朱砂大印；未集齐时淡印）
       const allPlaced = ready && Object.keys(placed).length === n;
-      const sub = { x: toolX, y, w: toolW, h: 84 };
+      const sealSize = Math.min(100, Math.round(toolW * 0.86));
+      const sub = { x: toolX, y, w: toolW, h: sealSize + 16 };
       if (!allPlaced && !done) ctx.globalAlpha = 0.45;
-      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + 40, 76, done ? '已破' : '呈堂', -0.05);
+      drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + (sealSize + 8) / 2, sealSize, done ? '已破' : '呈堂', -0.05);
       ctx.globalAlpha = 1;
       zones.submitBtn = sub;
       return;
@@ -4076,11 +4082,12 @@ function createPlayScene(manager, opts) {
     }
     const cw = clueW - 16 - strip;
 
-    /* 嫌疑人卡数据先行（不绘制）：用于行高与整体居中计算 */
-    const COLS = 3, GAP = 8;
+    /* 嫌疑人卡数据先行（不绘制）：用于行高计算 */
+    const GAP = 8;
+    const COLS = Math.max(2, Math.min(4, Math.floor((cw + GAP) / 118)));   // 列数自适应：卡宽 ≥118px，证词一行 ≥7 字
     const cardW = (cw - (COLS - 1) * GAP) / COLS;
-    const AV = LAND ? 60 : Math.round(cardW * 0.46);   // 分层卡：头像区更大（人物色底）
-    const nameFs = LAND ? 17 : 14;   // T2 标题级：卡片姓名
+    const AV = LAND ? Math.min(72, Math.round(cardW * 0.52)) : Math.round(cardW * 0.5);   // 头像放大
+    const nameFs = LAND ? 19 : 15;   // T2 标题级：姓名放大
     const clueFs = LAND ? 14 : 12;   // T3 正文级：证词宋粗
     const lineH = clueFs + 4;
     const peopleCards = [];
@@ -4093,21 +4100,15 @@ function createPlayScene(manager, opts) {
       ctx.font = `bold ${clueFs}px ${FONTS.song}`;
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
       const lines = wrapText(ctx, text, cardW - 22);
-      // 分层卡：色底头像区(6+AV+4) + 姓名(22) + 证词内衬盒(lines×lineH+10)
-      const cardH = 6 + AV + 4 + 22 + 4 + lines.length * lineH + 10 + 6;
+      // 分层卡：色底头像区(6+AV+4) + 姓名(26) + 证词内衬盒(lines×lineH+10)
+      const cardH = 6 + AV + 4 + 26 + 4 + lines.length * lineH + 10 + 6;
       peopleCards.push({ p, lines, cardH });
     });
-    // 行高分组 + 内容总高
+    // 行高分组
     const rowsMeta = [];
     for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
       rowsMeta.push(Math.max(...peopleCards.slice(r0, r0 + COLS).map(c => c.cardH)));
     }
-    const gch = LAND && generalLines().length ? generalLines().length * 18 + 30 + 6 : 0;
-    const rowsH = rowsMeta.reduce((a, b) => a + b, 0) + Math.max(0, rowsMeta.length - 1) * GAP;
-    const totalH = gch + rowsH;
-    // 视觉平衡：内容不满栏时整组垂直居中（而非全堆顶部）
-    const bandH0 = clueBandBottom - clueBandY;
-    if (totalH < bandH0) y = 2 + (bandH0 - totalH) / 2;
 
     // 横屏：通用线索卡并入列表首位
     if (LAND) {
@@ -4173,8 +4174,8 @@ function createPlayScene(manager, opts) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(p.short, avX + AV - 9, avY + AV - 9.5);
-        // 中：姓名+性别整体居中（被害者标明身份）；容器约束：超宽则逐级缩字，绝不出框
-        const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
+        // 中：姓名+性别整体居中（简称已在徽章，不重复；被害者改右上朱砂小签「尸」）
+        const namePart = p.name;
         const gW = 16;
         let nfs = nameFs;
         ctx.font = `bold ${nfs}px ${FONTS.kai}`;
@@ -4185,7 +4186,7 @@ function createPlayScene(manager, opts) {
           nameW = ctx.measureText(namePart).width;
         }
         const gx = Math.max(x + 5, x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2);
-        const gy = y + zoneH + 2 + 11;
+        const gy = y + zoneH + 2 + 13;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
@@ -4194,8 +4195,18 @@ function createPlayScene(manager, opts) {
           ctx.fillStyle = p.gender === 'F' ? '#b13a30' : '#33465a';
           ctx.fillText(p.gender === 'F' ? '♀' : '♂', gx + nameW + 4, gy);
         }
+        if (p.isVictim) {
+          // 被害者：右上朱砂小签（不占姓名宽度，根治长名超框）
+          ctx.fillStyle = '#b13a30';
+          roundRect(ctx, x + cardW - 24, y + 4, 18, 18, 4);
+          ctx.fill();
+          ctx.fillStyle = '#f2ecdd';
+          ctx.font = `bold 12px ${FONTS.kai}`;
+          ctx.textAlign = 'center';
+          ctx.fillText('尸', x + cardW - 15, y + 13);
+        }
         // 下：证词内衬盒（人卡词卡分层：附件感）
-        const boxX = x + 5, boxY = y + zoneH + 2 + 22, boxW = cardW - 10;
+        const boxX = x + 5, boxY = y + zoneH + 2 + 26, boxW = cardW - 10;
         const boxH = cd.lines.length * lineH + 10;
         ctx.fillStyle = '#e7dcc2';
         roundRect(ctx, boxX, boxY, boxW, boxH, 5);
