@@ -3349,6 +3349,7 @@ function createPlayScene(manager, opts) {
   let holdStart = 0;
   let painting = false;
   let lastPaint = -1;
+  let erasedInDrag = false;   // 拖动连续擦除：本段拖动是否已压过一次撤销
   let hlRoom = -1;
   let toastMsg = '';
   let toastUntil = 0;
@@ -3432,11 +3433,18 @@ function createPlayScene(manager, opts) {
   function eraseCell(i) {
     if (done || (placed[i] === undefined && !marks[i])) return;
     pushUndo();
+    eraseCellDirect(i);
+    ensureTimer();
+    afterChange();
+  }
+
+  /* 拖动连续擦除用：不压撤销栈（整段拖动由调用方统一压一次）、不触发 afterChange */
+  function eraseCellDirect(i) {
+    if (placed[i] === undefined && !marks[i]) return false;
     delete placed[i];
     delete marks[i];
     hintCells.delete(i);
-    ensureTimer();
-    afterChange();
+    return true;
   }
 
   function clearAll() {
@@ -3692,9 +3700,9 @@ function createPlayScene(manager, opts) {
       c.lineTo(boardSide, k * cell);
     }
     c.stroke();
-    // 墙线
+    // 墙线（区域分界线进一步加粗）
     c.strokeStyle = '#161616';
-    c.lineWidth = 2.5;
+    c.lineWidth = 5;
     c.beginPath();
     for (let r = 0; r < n; r++) {
       for (let cc = 0; cc < n; cc++) {
@@ -3860,7 +3868,7 @@ function createPlayScene(manager, opts) {
     // 悬浮联动高亮（PC：区域框线高亮——沿房间轮廓描金；物件格金框暖罩）
     if (ready && hoverPerson >= 0) {
       ctx.strokeStyle = 'rgba(214,182,92,0.95)';
-      ctx.lineWidth = 5;   // 区域框线高亮加粗
+      ctx.lineWidth = 8;   // 区域框线高亮再加粗
       ctx.lineCap = 'round';
       hoverRoomCells.forEach(i => {
         const r = M.row(i, n), c = M.col(i, n), ox = boardX + c * cell, oy = boardY + r * cell;
@@ -4802,6 +4810,11 @@ function createPlayScene(manager, opts) {
         if (Math.hypot(x - downX, y - downY) <= DRAG_SLOP) return;
         clearTimeout(holdTimer);
         holdCell = -1;
+        // 擦除工具：按住拖动连续擦除（起点格先擦，整段拖动只压一次撤销）
+        if (tool === 'erase' && downCell >= 0) {
+          if (!erasedInDrag) { pushUndo(); erasedInDrag = true; }
+          if (eraseCellDirect(downCell)) { ensureTimer(); saveSoon(); manager.invalidate(); }
+        }
         // 拖动成立：先补标起点格（此前在等待长按判定，未标记）
         if (!holdFired && downCell >= 0 && (tool === 'note' || tool === 'x') &&
             placed[downCell] === undefined && board.occupiable[downCell] && !hasAnyX(downCell)) {
@@ -4818,6 +4831,10 @@ function createPlayScene(manager, opts) {
         if (i === lastPaint) return;
         lastPaint = i;
         if (i < 0 || holdFired) return;
+        if (tool === 'erase') {   // 擦除拖动：逐格连续擦除
+          if (eraseCellDirect(i)) { ensureTimer(); saveSoon(); manager.invalidate(); }
+          return;
+        }
         if (placed[i] === undefined && board.occupiable[i] && !hasAnyX(i)) {
           if (tool === 'note' || tool === 'x') {   // 滑动连续批注/打叉（已打叉格跳过，仅擦除可改）
             marks[i] = marks[i] || {};
@@ -4843,6 +4860,7 @@ function createPlayScene(manager, opts) {
       }
       holdCell = -1;
       painting = false;
+      erasedInDrag = false;
       hlRoom = -1;
       clueScroll.onEnd();
       hintScroll.onEnd();
