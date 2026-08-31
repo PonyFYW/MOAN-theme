@@ -3867,7 +3867,7 @@ function createPlayScene(manager, opts) {
     // 悬浮联动高亮（PC：区域框线高亮——沿房间轮廓描金；物件格金框暖罩）
     if (ready && hoverPerson >= 0) {
       ctx.strokeStyle = 'rgba(214,182,92,0.95)';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 5;   // 区域框线高亮加粗
       ctx.lineCap = 'round';
       hoverRoomCells.forEach(i => {
         const r = M.row(i, n), c = M.col(i, n), ox = boardX + c * cell, oy = boardY + r * cell;
@@ -3902,16 +3902,16 @@ function createPlayScene(manager, opts) {
     ctx.translate(boardX, boardY);
     drawRoomLabels(ctx);
     ctx.restore();
-    // 国风坐标：横轴在棋盘上方，纵轴在左（再放大加粗，描金粗楷）
+    // 国风坐标：横轴在棋盘上方，纵轴在左（加粗加大、与板缘拉开间距）
     ctx.fillStyle = 'rgba(214,182,92,0.95)';
-    ctx.font = `bold 20px ${FONTS.kai}`;
+    ctx.font = `bold 24px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
-      ctx.fillText(M.COL_NUMS[c], boardX + (c + 0.5) * cell, boardY - COORD / 2);
+      ctx.fillText(M.COL_NUMS[c], boardX + (c + 0.5) * cell, boardY - 16);
     }
     for (let r = 0; r < n; r++) {
-      ctx.fillText(M.ROW_STEMS[r], boardX - COORD / 2, boardY + (r + 0.5) * cell);
+      ctx.fillText(M.ROW_STEMS[r], boardX - 16, boardY + (r + 0.5) * cell);
     }
   }
 
@@ -4601,18 +4601,19 @@ function createPlayScene(manager, opts) {
       drawToolbar(ctx, t);
       drawClues(ctx, t);
 
-      // toast（横屏贴底避框，竖屏在功能条上方）
+      // toast（横屏：棋盘正下方居中；竖屏：功能条上方）
       if (Date.now() < toastUntil) {
-        const toastY = LAND ? H - 46 : toolY - 40;
+        const toastX = LAND ? boardX + boardSide / 2 : W / 2;
+        const toastY = LAND ? Math.min(boardY + boardSide + 10, H - 40) : toolY - 40;
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         const tw = ctx.measureText(toastMsg).width + 32;
-        roundRect(ctx, (W - tw) / 2, toastY, tw, 30, 15);
+        roundRect(ctx, toastX - tw / 2, toastY, tw, 30, 15);
         ctx.fill();
         ctx.fillStyle = '#f5eeda';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(toastMsg, W / 2, toastY + 15);
+        ctx.fillText(toastMsg, toastX, toastY + 15);
         manager.invalidate(); // 到期自动消失
       }
 
