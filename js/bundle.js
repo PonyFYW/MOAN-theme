@@ -3288,9 +3288,11 @@ function createPlayScene(manager, opts) {
     if (LAND) {
       // 横屏：左线索列（含通用卡）/ 中棋盘 / 最右侧竖排功能轨（Fitts：主操作区加宽）
       const RAIL_W = 88;
-      boardSide = Math.min(H - HDR_TOP - HEADER_BAND - COORD - 12, W * 0.6);
+      const rightX0 = 8 + Math.min(280, Math.max(220, W * 0.32)) + 12 + COORD;
+      const avail = W - RAIL_W - 8 - 12 - rightX0 - 8;   // 板区可用宽（含框垫，防压功能轨）
+      boardSide = Math.min(H - HDR_TOP - HEADER_BAND - COORD - 12, W * 0.68, avail);
       clueX = 8;
-      clueW = Math.min(300, Math.max(220, W * 0.32));
+      clueW = Math.min(280, Math.max(220, W * 0.32));   // 案卷收窄，让给棋盘
       clueBandY = HDR_TOP + HEADER_BAND + 4;
       clueBandBottom = H - 8;
       toolX = W - RAIL_W - 8;
@@ -3672,6 +3674,18 @@ function createPlayScene(manager, opts) {
         c.fillRect(fx, fy, cell + 0.5, cell + 0.5);
       }
     }
+    // 区域色相罩（色彩信息化：墨系粉彩 9% 罩，纹理保留、区域一眼可辨）
+    const ROOM_HUES = ['#c2a24a', '#7a9e6b', '#5a7a9a', '#9a6b8a', '#8a7a5a', '#5a8a8a', '#a05a4a', '#6b6b9a', '#9a8a4a', '#4a8a6a', '#8a5a6a', '#5a6a9a'];
+    board.rooms.forEach(room => {
+      c.fillStyle = ROOM_HUES[room.id % ROOM_HUES.length];
+      c.globalAlpha = 0.09;
+      for (let i = 0; i < n * n; i++) {
+        if (board.roomAt[i] === room.id) {
+          c.fillRect(M.col(i, n) * cell, M.row(i, n) * cell, cell, cell);
+        }
+      }
+      c.globalAlpha = 1;
+    });
     // 细网格
     c.strokeStyle = 'rgba(30,30,30,0.18)';
     c.lineWidth = 1;
@@ -3730,7 +3744,7 @@ function createPlayScene(manager, opts) {
    * 断开区域取最底行的最长连续段居中，防止标签落进别的房间。 */
   function drawRoomLabels(c) {
     c.fillStyle = 'rgba(20,20,20,0.78)';
-    c.font = `bold ${Math.max(10, cell * 0.22)}px ${FONTS.kai}`;   // 区域名楷体（装饰字级压过功能字级的问题修正）
+    c.font = `bold ${Math.min(24, Math.max(10, cell * 0.20))}px ${FONTS.kai}`;   // T1 展示级：区域名 ≤24px
     c.textAlign = 'center';
     c.textBaseline = 'bottom';
     board.rooms.forEach(room => {
@@ -3782,9 +3796,9 @@ function createPlayScene(manager, opts) {
   function drawBoard(ctx, t) {
     if (cacheVer !== data.imageVersion()) rebuildBoardCache();
     // 装裱框（公堂视觉：深色绫绢 + 金线内衬；仅横屏大画布加。
-    // 框垫=坐标高+14：坐标落在金线与板缘之间的留白带内，绝不骑线）
+    // 框垫=坐标高+10：坐标落在金线与板缘之间的留白带内，绝不骑线）
     if (LAND) {
-      const fp = COORD + 14;
+      const fp = COORD + 10;
       ctx.fillStyle = '#241d12';
       roundRect(ctx, boardX - fp, boardY - fp, boardSide + fp * 2, boardSide + fp * 2, 6);
       ctx.fill();
@@ -3851,7 +3865,7 @@ function createPlayScene(manager, opts) {
         ctx.textBaseline = 'top';
         noted.slice(0, 6).forEach((p, k) => {
           // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）；v3.1 字号放大（简称标注易读）
-          const fs = Math.max(12, cell * 0.28);
+          const fs = Math.max(12, cell * 0.20);   // T5 徽章级：批注按格等比，不再压场
           const tx = x + 2 + (k % 3) * cell * 0.32;
           const ty = y + 2 + Math.floor(k / 3) * cell * 0.3;
           ctx.font = `bold ${fs}px sans-serif`;
@@ -3882,9 +3896,9 @@ function createPlayScene(manager, opts) {
     ctx.translate(boardX, boardY);
     drawRoomLabels(ctx);
     ctx.restore();
-    // 国风坐标：横轴在棋盘上方，纵轴在左（楷体描金，公堂视觉系统）
+    // 国风坐标：横轴在棋盘上方，纵轴在左（T4 辅助级 14px 楷体描金）
     ctx.fillStyle = 'rgba(214,182,92,0.95)';
-    ctx.font = `15px ${FONTS.kai}`;
+    ctx.font = `14px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
@@ -3914,7 +3928,7 @@ function createPlayScene(manager, opts) {
         ctx.lineWidth = 1.4;
         ctx.stroke();
         drawToolIcon(ctx, tb.key, rect.x + toolW / 2, rect.y + 21, 24, active ? '#b13a30' : t.fg);
-        ctx.font = `12px ${FONTS.kai}`;
+        ctx.font = `13px ${FONTS.kai}`;
         ctx.fillStyle = active ? '#b13a30' : t.muted;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -3993,14 +4007,15 @@ function createPlayScene(manager, opts) {
     } else {
       drawSVG(ctx, L.Art.avatarSVG(p.avatar), x + cell * 0.04, y + cell * 0.04, cell * 0.92, cell * 0.92);
     }
-    ctx.fillStyle = 'rgba(245,238,218,0.92)';
-    roundRect(ctx, x + 2, y + 2, 17, 14, 3);
+    const bfs = Math.max(12, cell * 0.15);
+    ctx.fillStyle = 'rgba(242,236,221,0.92)';
+    roundRect(ctx, x + 2, y + 2, bfs + 7, bfs + 5, 3);
     ctx.fill();
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = p.color || '#333';   // 徽章文字随人物色（与批注/卡片呼应）
+    ctx.font = `bold ${bfs}px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.short, x + 10.5, y + 9);
+    ctx.fillText(p.short, x + 2 + (bfs + 7) / 2, y + 2 + (bfs + 5) / 2);
   }
 
   /* 工笔头像（webp）优先，未加载完成回退参数化 SVG */
@@ -4031,7 +4046,7 @@ function createPlayScene(manager, opts) {
     let ly = y + 26;
     lines.forEach(wl => {
       ctx.fillStyle = '#2a2620';
-      ctx.font = `bold 13px ${FONTS.song}`;   // 证词宋体加粗（公堂视觉）
+      ctx.font = `bold 14px ${FONTS.song}`;   // T3 正文级
       ctx.fillText(wl.text, gx + 10, ly);
       ly += 18;
     });
@@ -4049,24 +4064,24 @@ function createPlayScene(manager, opts) {
     zones.clueCards = [];
     let y = 2;
 
-    // 横屏：案卷=整栏宣纸底 + 右侧竖排「證詞」（公堂视觉；卡片让出右侧竖条）
-    const strip = LAND ? 30 : 0;
+    // 横屏：案卷=整栏宣纸底 + 右侧竖排「證詞」（竖条瘦身，宽度让给卡片）
+    const strip = LAND ? 18 : 0;
     if (LAND) {
       fillPaper(ctx, 0, 0, clueW, clueBandBottom - clueBandY, 4, '#f2ecdd');
       ctx.fillStyle = '#b13a30';
-      ctx.font = `22px ${FONTS.kai}`;
+      ctx.font = `16px ${FONTS.kai}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      '證詞'.split('').forEach((ch, i) => ctx.fillText(ch, clueW - 17, 14 + i * 30));
+      '證詞'.split('').forEach((ch, i) => ctx.fillText(ch, clueW - 11, 14 + i * 24));
     }
     const cw = clueW - 16 - strip;
 
     /* 嫌疑人卡数据先行（不绘制）：用于行高与整体居中计算 */
     const COLS = 3, GAP = 8;
     const cardW = (cw - (COLS - 1) * GAP) / COLS;
-    const AV = LAND ? 52 : Math.round(cardW * 0.44);
-    const nameFs = LAND ? 15 : 13;
-    const clueFs = LAND ? 13 : 11;
+    const AV = LAND ? 60 : Math.round(cardW * 0.46);   // 分层卡：头像区更大（人物色底）
+    const nameFs = LAND ? 17 : 14;   // T2 标题级：卡片姓名
+    const clueFs = LAND ? 14 : 12;   // T3 正文级：证词宋粗
     const lineH = clueFs + 4;
     const peopleCards = [];
     board.people.forEach(p => {
@@ -4077,8 +4092,9 @@ function createPlayScene(manager, opts) {
       if (!pairs.length) return;
       ctx.font = `bold ${clueFs}px ${FONTS.song}`;
       const text = pairs.map(([c]) => stripTags(c.text)).join('');
-      const lines = wrapText(ctx, text, cardW - 12);
-      const cardH = 8 + AV + 5 + (nameFs + 5) + 4 + lines.length * lineH + 8;
+      const lines = wrapText(ctx, text, cardW - 22);
+      // 分层卡：色底头像区(6+AV+4) + 姓名(22) + 证词内衬盒(lines×lineH+10)
+      const cardH = 6 + AV + 4 + 22 + 4 + lines.length * lineH + 10 + 6;
       peopleCards.push({ p, lines, cardH });
     });
     // 行高分组 + 内容总高
@@ -4110,7 +4126,7 @@ function createPlayScene(manager, opts) {
       let gy = y + 26;
       lines.forEach(wl => {
         ctx.fillStyle = '#2a2620';
-        ctx.font = `bold 13px ${FONTS.song}`;
+        ctx.font = `bold 14px ${FONTS.song}`;   // T3 正文级
         ctx.fillText(wl.text, 18, gy);
         gy += 18;
       });
@@ -4136,17 +4152,27 @@ function createPlayScene(manager, opts) {
         ctx.lineWidth = p.id === selected ? 2 : 1;
         roundRect(ctx, x, y, cardW, rowH, 8);
         ctx.stroke();
-        // 上：头像居中 + 右下角简称徽章
-        const avX = x + (cardW - AV) / 2, avY = y + 8;
+        // 上：人物色底头像区（色彩信息化：认人不读字；与棋盘批注同色）
+        const zoneH = 6 + AV + 4;
+        ctx.save();
+        roundRect(ctx, x, y, cardW, zoneH + 2, 8);
+        ctx.clip();
+        ctx.globalAlpha = 0.24;
+        ctx.fillStyle = p.color || '#8a8578';
+        ctx.fillRect(x, y, cardW, zoneH + 2);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        const avX = x + (cardW - AV) / 2, avY = y + 6;
         drawPortrait(ctx, p, avX, avY, AV, AV);
+        // 简称徽章（人物色文字，呼应棋盘批注）
         ctx.fillStyle = 'rgba(242,236,221,0.95)';
-        roundRect(ctx, avX + AV - 17, avY + AV - 16, 17, 14, 3);
+        roundRect(ctx, avX + AV - 18, avY + AV - 17, 18, 15, 3);
         ctx.fill();
-        ctx.fillStyle = '#333';
-        ctx.font = `bold 10px ${FONTS.kai}`;
+        ctx.fillStyle = p.color || '#333';
+        ctx.font = `bold 12px ${FONTS.kai}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(p.short, avX + AV - 8.5, avY + AV - 9);
+        ctx.fillText(p.short, avX + AV - 9, avY + AV - 9.5);
         // 中：姓名+性别整体居中（被害者标明身份）；容器约束：超宽则逐级缩字，绝不出框
         const namePart = `${p.name}（${p.short}）${p.isVictim ? '（被害者）' : ''}`;
         const gW = 16;
@@ -4159,7 +4185,7 @@ function createPlayScene(manager, opts) {
           nameW = ctx.measureText(namePart).width;
         }
         const gx = Math.max(x + 5, x + (cardW - nameW - (p.isVictim ? 0 : gW)) / 2);
-        const gy = avY + AV + 5 + (nameFs + 5) / 2;
+        const gy = y + zoneH + 2 + 11;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = p.id === selected ? '#b13a30' : '#6b5f3a';
@@ -4168,13 +4194,18 @@ function createPlayScene(manager, opts) {
           ctx.fillStyle = p.gender === 'F' ? '#b13a30' : '#33465a';
           ctx.fillText(p.gender === 'F' ? '♀' : '♂', gx + nameW + 4, gy);
         }
-        // 下：线索（宋体加粗）
-        let ly = avY + AV + 5 + (nameFs + 5) + 4;
+        // 下：证词内衬盒（人卡词卡分层：附件感）
+        const boxX = x + 5, boxY = y + zoneH + 2 + 22, boxW = cardW - 10;
+        const boxH = cd.lines.length * lineH + 10;
+        ctx.fillStyle = '#e7dcc2';
+        roundRect(ctx, boxX, boxY, boxW, boxH, 5);
+        ctx.fill();
+        let ly = boxY + 6;
         ctx.textBaseline = 'top';
         ctx.font = `bold ${clueFs}px ${FONTS.song}`;
         cd.lines.forEach(s => {
           ctx.fillStyle = '#2a2620';
-          ctx.fillText(s, x + 6, ly);
+          ctx.fillText(s, boxX + 6, ly);
           ly += lineH;
         });
         zones.clueCards.push({ x, y, w: cardW, h: rowH, p: p.id });
@@ -4244,7 +4275,7 @@ function createPlayScene(manager, opts) {
     // 文本区（超高可滚动）
     const tx = card.x + 16, ty = card.y + 40;
     const tw = card.w - 40, th = card.h - 40 - 46;
-    const bodyF = `13px ${FONTS.song}`, bodyB = `bold 13px ${FONTS.song}`;
+    const bodyF = `14px ${FONTS.song}`, bodyB = `bold 14px ${FONTS.song}`;
     ctx.font = bodyF;
     const lines = wrapRich(ctx, text, tw, bodyF, bodyB);
     ctx.save();
@@ -4483,14 +4514,14 @@ function createPlayScene(manager, opts) {
       ctx.font = '20px sans-serif';
       ctx.fillText('←', 14, hdrY + HEADER_BAND / 2);
       zones.back = { x: 0, y: hdrY, w: 48, h: HEADER_BAND };
-      ctx.font = `15px ${FONTS.kai}`;
+      ctx.font = `bold 18px ${FONTS.kai}`;   // T2 标题级：案名
       // 标题：优先卷宗卡上的去重案名（主题案名仅 8 个会重名）
       const title = opts.title || (board && board.theme && board.theme.caseName);
-      ctx.fillText(title, 44, hdrY + 11);
+      ctx.fillText(title, 44, hdrY + 10);
       // 操作提示小字（常有玩家误把单击标记当放置，常驻提醒）
-      ctx.font = `9px ${FONTS.song}`;
+      ctx.font = `10px ${FONTS.song}`;
       ctx.fillStyle = t.muted;
-      ctx.fillText('单击标记 · 长按放置 · 长按擦除清空全部', 44, hdrY + 25);
+      ctx.fillText('单击标记 · 长按放置 · 长按擦除清空全部', 44, hdrY + 26);
       ctx.fillStyle = t.fg;
       // 右侧控件群（2 区）：主题 ← 切换 ← 计时，间距明确；横屏时收在胶囊左缘以内
       const hdrRight = (LAND && capsule && capsule.left) ? capsule.left - 8 : W - 8;
