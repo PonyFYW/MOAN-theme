@@ -3829,6 +3829,27 @@ function createPlayScene(manager, opts) {
         cells.forEach(i => ctx.fillRect(boardX + M.col(i, n) * cell, boardY + M.row(i, n) * cell, cell, cell));
       }
     }));
+    // 悬浮联动高亮（PC：区域框线高亮——沿房间轮廓描金；物件格金框暖罩。
+    // 先画高亮层、再画 token/批注：框线绝不覆盖简称与人物）
+    if (ready && hoverPerson >= 0) {
+      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+      ctx.lineWidth = 8;   // 区域框线高亮再加粗
+      ctx.lineCap = 'round';
+      hoverRoomCells.forEach(i => {
+        const r = M.row(i, n), c = M.col(i, n), ox = boardX + c * cell, oy = boardY + r * cell;
+        const room = board.roomAt[i];
+        if (r === 0 || board.roomAt[i - n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + 1); ctx.lineTo(ox + cell, oy + 1); ctx.stroke(); }
+        if (r === n - 1 || board.roomAt[i + n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + cell - 1); ctx.lineTo(ox + cell, oy + cell - 1); ctx.stroke(); }
+        if (c === 0 || board.roomAt[i - 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + 1, oy); ctx.lineTo(ox + 1, oy + cell); ctx.stroke(); }
+        if (c === n - 1 || board.roomAt[i + 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + cell - 1, oy); ctx.lineTo(ox + cell - 1, oy + cell); ctx.stroke(); }
+      });
+      hoverObjCells.forEach(i => {
+        const ox = boardX + M.col(i, n) * cell, oy = boardY + M.row(i, n) * cell;
+        ctx.fillStyle = 'rgba(194,162,74,0.28)';
+        ctx.fillRect(ox, oy, cell, cell);
+        ctx.strokeRect(ox + 1, oy + 1, cell - 2, cell - 2);
+      });
+    }
     // 放置的人物 / X / 笔记
     for (let i = 0; i < n * n; i++) {
       const r = M.row(i, n), c = M.col(i, n);
@@ -3864,26 +3885,6 @@ function createPlayScene(manager, opts) {
           ctx.fillText(p.short, tx, ty);
         });
       }
-    }
-    // 悬浮联动高亮（PC：区域框线高亮——沿房间轮廓描金；物件格金框暖罩）
-    if (ready && hoverPerson >= 0) {
-      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
-      ctx.lineWidth = 8;   // 区域框线高亮再加粗
-      ctx.lineCap = 'round';
-      hoverRoomCells.forEach(i => {
-        const r = M.row(i, n), c = M.col(i, n), ox = boardX + c * cell, oy = boardY + r * cell;
-        const room = board.roomAt[i];
-        if (r === 0 || board.roomAt[i - n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + 1); ctx.lineTo(ox + cell, oy + 1); ctx.stroke(); }
-        if (r === n - 1 || board.roomAt[i + n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + cell - 1); ctx.lineTo(ox + cell, oy + cell - 1); ctx.stroke(); }
-        if (c === 0 || board.roomAt[i - 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + 1, oy); ctx.lineTo(ox + 1, oy + cell); ctx.stroke(); }
-        if (c === n - 1 || board.roomAt[i + 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + cell - 1, oy); ctx.lineTo(ox + cell - 1, oy + cell); ctx.stroke(); }
-      });
-      hoverObjCells.forEach(i => {
-        const ox = boardX + M.col(i, n) * cell, oy = boardY + M.row(i, n) * cell;
-        ctx.fillStyle = 'rgba(194,162,74,0.28)';
-        ctx.fillRect(ox, oy, cell, cell);
-        ctx.strokeRect(ox + 1, oy + 1, cell - 2, cell - 2);
-      });
     }
     // 长按进度环
     if (holdCell >= 0 && !holdFired) {
