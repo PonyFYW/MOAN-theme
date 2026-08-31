@@ -3864,18 +3864,23 @@ function createPlayScene(manager, opts) {
         });
       }
     }
-    // 悬浮联动高亮（PC：区域软罩 + 物件格金框）
+    // 悬浮联动高亮（PC：区域框线高亮——沿房间轮廓描金；物件格金框暖罩）
     if (ready && hoverPerson >= 0) {
-      ctx.fillStyle = 'rgba(194,162,74,0.14)';
+      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
       hoverRoomCells.forEach(i => {
-        ctx.fillRect(boardX + M.col(i, n) * cell, boardY + M.row(i, n) * cell, cell, cell);
+        const r = M.row(i, n), c = M.col(i, n), ox = boardX + c * cell, oy = boardY + r * cell;
+        const room = board.roomAt[i];
+        if (r === 0 || board.roomAt[i - n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + 1); ctx.lineTo(ox + cell, oy + 1); ctx.stroke(); }
+        if (r === n - 1 || board.roomAt[i + n] !== room) { ctx.beginPath(); ctx.moveTo(ox, oy + cell - 1); ctx.lineTo(ox + cell, oy + cell - 1); ctx.stroke(); }
+        if (c === 0 || board.roomAt[i - 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + 1, oy); ctx.lineTo(ox + 1, oy + cell); ctx.stroke(); }
+        if (c === n - 1 || board.roomAt[i + 1] !== room) { ctx.beginPath(); ctx.moveTo(ox + cell - 1, oy); ctx.lineTo(ox + cell - 1, oy + cell); ctx.stroke(); }
       });
       hoverObjCells.forEach(i => {
         const ox = boardX + M.col(i, n) * cell, oy = boardY + M.row(i, n) * cell;
         ctx.fillStyle = 'rgba(194,162,74,0.28)';
         ctx.fillRect(ox, oy, cell, cell);
-        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
-        ctx.lineWidth = 2;
         ctx.strokeRect(ox + 1, oy + 1, cell - 2, cell - 2);
       });
     }
@@ -3897,9 +3902,9 @@ function createPlayScene(manager, opts) {
     ctx.translate(boardX, boardY);
     drawRoomLabels(ctx);
     ctx.restore();
-    // 国风坐标：横轴在棋盘上方，纵轴在左（坐标放大，描金楷体）
+    // 国风坐标：横轴在棋盘上方，纵轴在左（再放大加粗，描金粗楷）
     ctx.fillStyle = 'rgba(214,182,92,0.95)';
-    ctx.font = `17px ${FONTS.kai}`;
+    ctx.font = `bold 20px ${FONTS.kai}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let c = 0; c < n; c++) {
@@ -4106,7 +4111,7 @@ function createPlayScene(manager, opts) {
     const COLS = Math.max(2, Math.min(4, Math.floor((clueW - PADX * 2 + GAP) / 122)));
     const cardW = (clueW - PADX * 2 - (COLS - 1) * GAP) / COLS;
     const avSize = cardW - 10;                      // 色卡内头像（四周 5px 色边）
-    const nameH = 26;
+    const nameH = 32;
     const clueFs = LAND ? 14 : 12;
     const lineH = clueFs + 5;
     const peopleCards = [];
@@ -4121,9 +4126,9 @@ function createPlayScene(manager, opts) {
       const lines = wrapText(ctx, text, cardW - 16);
       peopleCards.push({ p, lines });
     });
-    // 统一尺寸：证词盒高度取全局最大行数，所有卡同高、证词垂直居中
+    // 统一尺寸：证词盒加高（约两倍行高空间），所有卡同高、证词垂直居中
     const maxLines = Math.max(1, ...peopleCards.map(c => c.lines.length));
-    const boxH = maxLines * lineH + 12;
+    const boxH = maxLines * lineH * 2 + 16;
     const uniH = 5 + avSize + nameH + 5 + boxH;
     // 行绘制（全局统一高度 uniH；行内同高）
     for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
@@ -4140,18 +4145,26 @@ function createPlayScene(manager, opts) {
         roundRect(ctx, x, y, cardW, 5 + avSize + nameH, 10);
         ctx.fill();
         drawPortrait(ctx, p, x + 5, y + 5, avSize, avSize);
-        // 简称（压头像左下，放大；棋盘批注同源）
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = 'rgba(20,16,10,0.72)';
-        ctx.font = `bold 14px ${FONTS.kai}`;
-        ctx.fillText(p.short, x + 8, y + 5 + avSize - 18);
-        // 姓名（色卡底条、居中）
-        ctx.fillStyle = 'rgba(20,16,10,0.88)';
-        ctx.font = `bold ${LAND ? 17 : 14}px ${FONTS.kai}`;
+        // 简称牌（墨底描金小牌，加大加粗；棋盘批注同源）
+        const bw = 26, bh = 20, bx = x + 6, by = y + 5 + avSize - 24;
+        ctx.fillStyle = 'rgba(22,19,16,0.82)';
+        roundRect(ctx, bx, by, bw, bh, 4);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(214,182,92,0.85)';
+        ctx.lineWidth = 1.2;
+        roundRect(ctx, bx, by, bw, bh, 4);
+        ctx.stroke();
+        ctx.fillStyle = '#f2ecdd';
+        ctx.font = `bold 16px ${FONTS.kai}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(p.name, x + cardW / 2, y + 5 + avSize + nameH / 2);
+        ctx.fillText(p.short, bx + bw / 2, by + bh / 2 + 1);
+        // 姓名（色卡底条、居中、放大加粗）
+        ctx.fillStyle = 'rgba(20,16,10,0.92)';
+        ctx.font = `bold ${LAND ? 22 : 17}px ${FONTS.kai}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.name, x + cardW / 2, y + 5 + avSize + nameH / 2 + 2);
         // 性别角标（右上圆牌，粉/蓝）
         ctx.fillStyle = p.gender === 'F' ? '#ec7fa8' : '#5a9bd8';
         ctx.beginPath(); ctx.arc(x + cardW - 12, y + 12, 11, 0, Math.PI * 2); ctx.fill();
@@ -4190,14 +4203,12 @@ function createPlayScene(manager, opts) {
         roundRect(ctx, x, boxY, cardW, boxH, 8);
         ctx.fill();
         ctx.font = `bold ${clueFs}px ${FONTS.song}`;
-        const maxW = Math.max(...cd.lines.map(s => ctx.measureText(s).width));
-        const tx = x + Math.max(8, (cardW - maxW) / 2);
-        let ly = boxY + 6 + (boxH - 12 - cd.lines.length * lineH) / 2 + 1;
-        ctx.textAlign = 'left';
+        let ly = boxY + 8 + (boxH - 16 - cd.lines.length * lineH) / 2;
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         cd.lines.forEach(s => {
           ctx.fillStyle = '#e6dfcc';
-          ctx.fillText(s, tx, ly);
+          ctx.fillText(s, x + cardW / 2, ly);   // 线索文字逐行居中
           ly += lineH;
         });
         zones.clueCards.push({ x, y, w: cardW, h: rowH, p: p.id });
