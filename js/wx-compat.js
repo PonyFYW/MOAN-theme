@@ -56,6 +56,14 @@
       else if (cbs.hover) cbs.hover(mouseEv(e, false));   // PC 悬浮（卡片高亮/联动高亮）
     });
     window.addEventListener('mouseup', function (e) { if (down) { down = false; fire('end', mouseEv(e, true)); } });
+    /* 滚轮 → wx.onWheel（网页端滚动条交互） */
+    canvas.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      if (cbs.wheel) {
+        var rect = canvas.getBoundingClientRect();
+        cbs.wheel({ deltaY: e.deltaY, clientX: e.clientX - rect.left, clientY: e.clientY - rect.top });
+      }
+    }, { passive: false });
   }
 
   window.wx = {
@@ -76,6 +84,8 @@
     onContextMenu: function (fn) { cbs.context = fn; },
     /* 鼠标悬浮（PC）：单槽回调，play 场景注册卡片/棋盘联动高亮 */
     onHover: function (fn) { cbs.hover = fn; },
+    /* 滚轮（PC 网页端滚动）：单槽回调，场景注册后按区域消费 */
+    onWheel: function (fn) { cbs.wheel = fn; },
     /* 窗口尺寸变化（旋转/拖窗口）：回报画布 CSS 尺寸（已扣除安全区） */
     onWindowResize: function (fn) {
       window.addEventListener('resize', function () {

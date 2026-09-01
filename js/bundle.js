@@ -2412,28 +2412,84 @@ module.exports = {
 
 });
 __def("src/ui/scroll.js", function (require, module, exports) {
-/* 拖动滚动（跟随手指 + 边界钳制；惯性滚动留待 P4' 打磨）。 */
+/* 拖动滚动（跟随手指 + 边界钳制）+ 网页端滚动条（灰黑轨道/滑块，滚轮 + 滑块拖拽）。 */
 function createScroll() {
   let offset = 0, max = 0, startY = 0, startOffset = 0, active = false;
-  return {
+  let thumbDrag = null;   // { grabDy, startOffset }（滑块拖拽中）
+  let contentH = 0, viewH = 0;
+
+  const api = {
     get offset() { return offset; },
+    get contentH() { return contentH; },
+    get viewH() { return viewH; },
+
     /* 每次渲染时调用：内容/视口高度变化后钳制 offset */
-    setRange(contentH, viewH) {
-      max = Math.max(0, contentH - viewH);
+    setRange(ch, vh) {
+      contentH = ch; viewH = vh;
+      max = Math.max(0, ch - vh);
       if (offset > max) offset = max;
     },
+
     onStart(y) {
       startY = y;
       startOffset = offset;
       active = true;
     },
     onMove(y) {
+      if (thumbDrag) {
+        api.dragThumb(y);
+        return;
+      }
       if (!active) return;
       offset = Math.min(max, Math.max(0, startOffset + (startY - y)));
     },
-    onEnd() { active = false; },
-    reset() { offset = 0; active = false; }
+    onEnd() { active = false; thumbDrag = null; },
+    reset() { offset = 0; active = false; },
+
+    /* ---------- 网页端：滚轮 ---------- */
+    scrollBy(dy) {
+      offset = Math.min(max, Math.max(0, offset + dy));
+    },
+
+    /* ---------- 网页端：滚动条（灰黑配色） ----------
+     * drawTrack(ctx, x, y, h)：x,y 为轨道左上角，h 为轨道高；
+     * 轨道 rgba 白 6% 底、滑块 #4a4a44（拖拽/超限时 #6a6a64）。 */
+    _metrics(x, y, h) {
+      if (contentH <= viewH) return null;
+      const thumbH = Math.max(28, h * viewH / contentH);
+      const ratio = max ? offset / max : 0;
+      const thumbY = y + (h - thumbH) * ratio;
+      return { track: { x, y, w: 6, h }, thumb: { x, y: thumbY, w: 6, h: thumbH } };
+    },
+    drawTrack(ctx, x, y, h) {
+      const m = api._metrics(x, y, h);
+      if (!m) return;
+      ctx.fillStyle = 'rgba(242,236,221,0.07)';   // 轨道（灰黑系浅底）
+      ctx.fillRect(m.track.x, m.track.y, m.track.w, m.track.h);
+      ctx.fillStyle = thumbDrag ? '#6a6a64' : '#4a4a44';   // 滑块（灰黑）
+      ctx.fillRect(m.thumb.x, m.thumb.y, m.thumb.w, m.thumb.h);
+    },
+    /* 命中滑块（点按处视为抓住滑块） */
+    thumbHit(px, py, x, y, h) {
+      const m = api._metrics(x, y, h);
+      if (!m) return false;
+      return px >= m.thumb.x - 6 && px <= m.thumb.x + 12 && py >= m.thumb.y && py <= m.thumb.y + m.thumb.h;
+    },
+    thumbStart(py, x, y, h) {
+      thumbDrag = { grabDy: py - (api._metrics(x, y, h) ? api._metrics(x, y, h).thumb.y : 0), x, y, h };
+    },
+    /* 滑块拖到 py（用 thumbStart 记录的轨道几何换算） */
+    dragThumb(py) {
+      if (!thumbDrag) return;
+      const m = api._metrics(thumbDrag.x, thumbDrag.y, thumbDrag.h);
+      if (!m) return;
+      const thumbH = m.thumb.h;
+      const ty = Math.min(thumbDrag.y + thumbDrag.h - thumbH, Math.max(thumbDrag.y, py - thumbDrag.grabDy));
+      const ratio = (ty - thumbDrag.y) / (thumbDrag.h - thumbH);
+      offset = Math.min(max, Math.max(0, ratio * max));
+    }
   };
+  return api;
 }
 
 module.exports = { createScroll };
@@ -5205,12 +5261,11 @@ function renderHowtoModal(ctx, t, W, H, zones, modalScroll) {
   drawButton(ctx, t, zones.modalClose, '开始破案');
 }
 
-/* 主题器物/区域摘要（主题选择卡用） */
+/* 主题摘要（合并页主题卡用）：前三件器物 + 计数，一行收束（不再平铺信息墙） */
 function themeInfo(th) {
   const spec = data.themeSpec(th.id);
-  const objs = spec.objects.map(o => o.sittable ? `${o.name}(可坐)` : o.name).join('、');
-  const rooms = spec.indoor.concat(spec.outdoor).join('、');
-  return { objs, rooms };
+  const first = spec.objects.slice(0, 3).map(o => o.name).join('、');
+  return `${first} 等 ${spec.objects.length} 件器物 · ${spec.indoor.length + spec.outdoor.length} 处区域`;
 }
 
 /* ---------- 主页：只保留 玩法说明 + 开始游戏（入场淡入 + PC 悬浮描金） ---------- */
@@ -5404,6 +5459,13 @@ function createThemeScene(manager) {
       if (id !== hoverId) { hoverId = id; manager.invalidate(); }
     });
   }
+  // 滚轮（网页端）：整页滚动；弹层时滚弹层
+  if (typeof wx !== 'undefined' && wx.onWheel) {
+    wx.onWheel(e => {
+      (modal ? modalScroll : scroll).scrollBy(e.deltaY * 0.9);
+      manager.invalidate();
+    });
+  }
 
   const scene = {
     zones,
@@ -5432,11 +5494,8 @@ function createThemeScene(manager) {
         // 入场交错（70ms 阶梯，260ms easeOutCubic）
         const enterP = ease((now - enterAt - thIdx * 70) / 260);
         if (enterP < 1) manager.invalidate();
-        const info = themeInfo(th);
-        ctx.font = `13px ${FONTS.song}`;
-        const objLines = wrapText(ctx, `器物：${info.objs}`, CW - 96);
-        const roomLines = wrapText(ctx, `区域：${info.rooms}`, CW - 96);
-        const cardH = 38 + objLines.length * 22 + roomLines.length * 22 + 14;
+        const brief = themeInfo(th);
+        const cardH = 66;   // 摘要单行卡（信息收束后固定高度）
         const hov = hoverId === 'th:' + th.id;
         const rect = { x: 24, y: y - (hov ? 2 : 0) - (1 - enterP) * 14, w: CW - 48, h: cardH, th };
         const doneCount = th.cases.filter(c => {
@@ -5473,12 +5532,11 @@ function createThemeScene(manager) {
         ctx.font = `13px ${FONTS.song}`;
         const cntW = ctx.measureText(expanded ? '收起 ▲' : '展开 ▼').width + 12;
         ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14 - cntW - 56, rect.y + 18);
+        // 摘要单行（前三件器物 + 计数）
         ctx.textAlign = 'left';
-        ctx.fillStyle = '#2a2620';
-        let ly = rect.y + 38;
-        objLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 22; });
         ctx.fillStyle = '#6b5f3a';
-        roomLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 22; });
+        ctx.font = `13px ${FONTS.song}`;
+        ctx.fillText(brief, rect.x + 14, rect.y + 46);
         zones.themeCards.push(rect);
 
         // 手风琴：展开的关卡网格（ease-out 下滑 + 淡入）
@@ -5495,6 +5553,13 @@ function createThemeScene(manager) {
       });
       scroll.setRange(y + 16, H);
       ctx.restore();
+
+      // 网页端滚动条（灰黑轨道/滑块，贴内容右缘）
+      {
+        const tx = (W - contW()) / 2 + contW() - 10;
+        const ty = headerTop(W, H) + 58;
+        scroll.drawTrack(ctx, tx, ty, H - ty - 8);
+      }
 
       // 页眉：返回（与对局页一致的圆框箭头钮）+ 标题
       ctx.fillStyle = t.bg;
@@ -5550,7 +5615,13 @@ function createThemeScene(manager) {
       }
     },
 
-    onTouchStart(x, y) { (modal ? modalScroll : scroll).onStart(y); },
+    onTouchStart(x, y) {
+      if (modal) { modalScroll.onStart(y); return; }
+      const tx = (W - contW()) / 2 + contW() - 10;
+      const ty = headerTop(W, H) + 58;
+      if (scroll.thumbHit(x, y, tx, ty, H - ty - 8)) { scroll.thumbStart(y, tx, ty, H - ty - 8); return; }
+      scroll.onStart(y);
+    },
     onTouchMove(x, y) { (modal ? modalScroll : scroll).onMove(y); },
     onTouchEnd() { scroll.onEnd(); modalScroll.onEnd(); }
   };
