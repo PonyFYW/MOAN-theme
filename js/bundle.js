@@ -5281,20 +5281,26 @@ function createHomeScene(manager) {
   let hoverBtn = null;   // 'start' | 'howto' | null
   const ease = p => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
 
-  if (typeof wx !== 'undefined' && wx.onHover) {
-    wx.onHover(e => {
-      const t0 = e.touches && e.touches[0];
-      if (!t0) return;
-      const cx = t0.clientX - (W > H ? (W - Math.min(W, 640)) / 2 : 0);
-      const cy = t0.clientY;
-      const h = hit(zones.startBtn, cx, cy) ? 'start' : (hit(zones.howtoBtn, cx, cy) ? 'howto' : null);
-      if (h !== hoverBtn) { hoverBtn = h; manager.invalidate(); }
-    });
+  /* 悬浮/滚轮注册放到 onShow：单槽回调需每次场景显示时夺回
+   * （否则进入选关页再返回后，主页悬浮失效且 hoverBtn 卡在旧值→按钮常亮） */
+  function registerInput() {
+    hoverBtn = null;
+    if (typeof wx !== 'undefined' && wx.onHover) {
+      wx.onHover(e => {
+        const t0 = e.touches && e.touches[0];
+        if (!t0) return;
+        const cx = t0.clientX - (W > H ? (W - Math.min(W, 640)) / 2 : 0);
+        const cy = t0.clientY;
+        const h = hit(zones.startBtn, cx, cy) ? 'start' : (hit(zones.howtoBtn, cx, cy) ? 'howto' : null);
+        if (h !== hoverBtn) { hoverBtn = h; manager.invalidate(); }
+      });
+    }
   }
 
   const scene = {
     zones,
     onShow() {
+      registerInput();
       // 入场动画驱动：渲染中置脏不一定有下一帧，用定时器保帧（防动画卡死）
       const timer = setInterval(() => manager.invalidate(), 33);
       setTimeout(() => clearInterval(timer), 450);
@@ -5447,29 +5453,35 @@ function createThemeScene(manager) {
   const ease = p => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
   const contW = () => (W > H ? Math.min(W, 860) : W);
 
-  if (typeof wx !== 'undefined' && wx.onHover) {
-    wx.onHover(e => {
-      const t0 = e.touches && e.touches[0];
-      if (!t0) return;
-      const cx = t0.clientX - (W - contW()) / 2;
-      const cy = t0.clientY + scroll.offset;
-      let id = null;
-      for (const z of zones.themeCards) if (hit(z, cx, cy)) { id = 'th:' + z.th.id; break; }
-      if (!id) for (const z of zones.caseCards) if (hit(z, cx, cy)) { id = 'case:' + z.c.seed; break; }
-      if (id !== hoverId) { hoverId = id; manager.invalidate(); }
-    });
-  }
-  // 滚轮（网页端）：整页滚动；弹层时滚弹层
-  if (typeof wx !== 'undefined' && wx.onWheel) {
-    wx.onWheel(e => {
-      (modal ? modalScroll : scroll).scrollBy(e.deltaY * 0.9);
-      manager.invalidate();
-    });
+  /* 悬浮/滚轮注册放到 onShow：单槽回调需每次场景显示时夺回
+   * （否则来回切换场景后悬浮失效、高亮卡死在旧值） */
+  function registerInput() {
+    hoverId = null;
+    if (typeof wx !== 'undefined' && wx.onHover) {
+      wx.onHover(e => {
+        const t0 = e.touches && e.touches[0];
+        if (!t0) return;
+        const cx = t0.clientX - (W - contW()) / 2;
+        const cy = t0.clientY + scroll.offset;
+        let id = null;
+        for (const z of zones.themeCards) if (hit(z, cx, cy)) { id = 'th:' + z.th.id; break; }
+        if (!id) for (const z of zones.caseCards) if (hit(z, cx, cy)) { id = 'case:' + z.c.seed; break; }
+        if (id !== hoverId) { hoverId = id; manager.invalidate(); }
+      });
+    }
+    // 滚轮（网页端）：整页滚动；弹层时滚弹层
+    if (typeof wx !== 'undefined' && wx.onWheel) {
+      wx.onWheel(e => {
+        (modal ? modalScroll : scroll).scrollBy(e.deltaY * 0.9);
+        manager.invalidate();
+      });
+    }
   }
 
   const scene = {
     zones,
     onShow() {
+      registerInput();
       // 入场动画驱动：渲染中置脏不一定有下一帧，用定时器保帧（防动画卡死）
       const timer = setInterval(() => manager.invalidate(), 33);
       setTimeout(() => clearInterval(timer), 500);
