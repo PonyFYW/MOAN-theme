@@ -3408,7 +3408,6 @@ function createPlayScene(manager, opts) {
   let painting = false;
   let lastPaint = -1;
   let erasedInDrag = false;   // 拖动连续擦除：本段拖动是否已压过一次撤销
-  let hlRoom = -1;
   let toastMsg = '';
   let toastUntil = 0;
   let hintModal = null; // { steps, idx }
@@ -3864,15 +3863,6 @@ function createPlayScene(manager, opts) {
       ctx.translate(boardX, boardY);
       drawBoardStatic(ctx);
       ctx.restore();
-    }
-    // 触碰区域高亮
-    if (hlRoom >= 0) {
-      ctx.fillStyle = 'rgba(120,120,120,0.20)';
-      for (let i = 0; i < n * n; i++) {
-        if (board.roomAt[i] === hlRoom) {
-          ctx.fillRect(boardX + M.col(i, n) * cell, boardY + M.row(i, n) * cell, cell, cell);
-        }
-      }
     }
     // 冲突高亮（同行/列多人）
     const rows = {}, cols = {};
@@ -4894,7 +4884,6 @@ function createPlayScene(manager, opts) {
         downX = x; downY = y;
         painting = true;
         lastPaint = i;
-        hlRoom = board.roomAt[i];
         if (tool === 'note' && placed[i] === undefined && board.occupiable[i] && !hasAnyX(i)) {
           holdCell = i;
           holdStart = Date.now();
@@ -4977,7 +4966,6 @@ function createPlayScene(manager, opts) {
       holdCell = -1;
       painting = false;
       erasedInDrag = false;
-      hlRoom = -1;
       clueScroll.onEnd();
       hintScroll.onEnd();
       howtoScroll.onEnd();
