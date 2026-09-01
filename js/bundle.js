@@ -3294,6 +3294,8 @@ const { drawSVG } = require('src/ui/svgmini.js');
 
 const HOLD_MS = 400;
 const ERASE_ALL_HOLD_MS = 650;
+/* 进度环出现下限：按下满 120ms 才画环——单击（<100ms）不再闪现圆环 */
+const RING_SHOW_MS = 120;
 /* 拖动容差：按下点位移 ≤12px 视为静止（与 scene.js 点按阈值一致）。
  * 真机"静止"触摸会发亚像素~数 px 的抖动 move，若据此取消长按计时，
  * 400ms 几乎必然撑不满 → 长按放置失败，抬起又被判为点按 → 误放简称批注。 */
@@ -3949,18 +3951,21 @@ function createPlayScene(manager, opts) {
       ctx.lineWidth = 8;
       ctx.strokeRect(hx + 2, hy + 2, cell - 4, cell - 4);
     }
-    // 长按进度环
+    // 长按进度环：满 RING_SHOW_MS 才出现（单击不闪环）；线宽 12（v3.2 再加粗一倍）
     if (holdCell >= 0 && !holdFired) {
-      const progress = Math.min(1, (Date.now() - holdStart) / HOLD_MS);
-      const r = M.row(holdCell, n), c = M.col(holdCell, n);
-      const cx = boardX + (c + 0.5) * cell, cy = boardY + (r + 0.5) * cell;
-      ctx.strokeStyle = board.people[selected].color || '#b84038';
-      ctx.lineWidth = 6;   // 长按进度环：v3.1 加粗（闭合圆环更醒目）
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(cx, cy, cell * 0.42, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-      ctx.stroke();
-      manager.invalidate(); // 动画期间持续重绘
+      const elapsed = Date.now() - holdStart;
+      if (elapsed >= RING_SHOW_MS) {
+        const progress = Math.min(1, (elapsed - RING_SHOW_MS) / (HOLD_MS - RING_SHOW_MS));
+        const r = M.row(holdCell, n), c = M.col(holdCell, n);
+        const cx = boardX + (c + 0.5) * cell, cy = boardY + (r + 0.5) * cell;
+        ctx.strokeStyle = board.people[selected].color || '#b84038';
+        ctx.lineWidth = 12;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(cx, cy, cell * 0.40, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+        ctx.stroke();
+      }
+      manager.invalidate(); // 动画期间持续重绘（含环出现前的等待段）
     }
     // 区域名最上层：压在 token/批注/进度环之上（参照月球主题 room-overlay 高层）
     ctx.save();
@@ -4100,7 +4105,7 @@ function createPlayScene(manager, opts) {
     } else {
       drawSVG(ctx, L.Art.avatarSVG(p.avatar), tx, ty, tw, th);
     }
-    // 简称：粗体描边字（无背景框，人物色填充）
+    // 简称：粗体描边字（无背景框，人物色填充）；与区域框线（内沿≈6px）留出间隙
     const bfs = Math.max(13, cell * 0.17);
     ctx.font = `bold ${bfs}px ${FONTS.kai}`;
     ctx.textAlign = 'left';
@@ -4108,9 +4113,9 @@ function createPlayScene(manager, opts) {
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(2.5, bfs * 0.22);
     ctx.strokeStyle = 'rgba(20,18,14,0.85)';
-    ctx.strokeText(p.short, x + 3, y + 2);
+    ctx.strokeText(p.short, x + 5, y + 9);
     ctx.fillStyle = p.color || '#f2ecdd';
-    ctx.fillText(p.short, x + 3, y + 2);
+    ctx.fillText(p.short, x + 5, y + 9);
   }
 
   /* 工笔头像（webp）优先，未加载完成回退参数化 SVG */
