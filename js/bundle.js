@@ -3942,6 +3942,15 @@ function createPlayScene(manager, opts) {
         });
       }
     }
+    // 悬浮格高亮（PC：光标下的空格 = 预演落点）
+    if (ready && hoverCell >= 0) {
+      const hx = boardX + M.col(hoverCell, n) * cell, hy = boardY + M.row(hoverCell, n) * cell;
+      ctx.fillStyle = 'rgba(194,162,74,0.16)';
+      ctx.fillRect(hx, hy, cell, cell);
+      ctx.strokeStyle = 'rgba(214,182,92,0.85)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx + 1, hy + 1, cell - 2, cell - 2);
+    }
     // 长按进度环
     if (holdCell >= 0 && !holdFired) {
       const progress = Math.min(1, (Date.now() - holdStart) / HOLD_MS);
@@ -3988,9 +3997,16 @@ function createPlayScene(manager, opts) {
       tools.forEach(tb => {
         const rect = { x: toolX, y, w: toolW, h: btnH };
         const active = (tb.key === 'x' && tool === 'x') || (tb.key === 'erase' && tool === 'erase');
+        const hov = hoverZoneId === tb.zone.replace('Btn', '');
         ctx.fillStyle = active ? 'rgba(177,58,48,0.85)' : 'rgba(242,236,221,0.10)';
         roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 9);
         ctx.fill();
+        if (hov) {
+          ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+          ctx.lineWidth = 1.8;
+          roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 9);
+          ctx.stroke();
+        }
         ctx.fillStyle = active ? '#f2ecdd' : t.fg;
         ctx.font = `bold ${labelFs}px ${FONTS.kai}`;
         ctx.textAlign = 'center';
@@ -4004,12 +4020,18 @@ function createPlayScene(manager, opts) {
       ctx.fillStyle = 'rgba(242,236,221,0.10)';
       roundRect(ctx, ax.x, ax.y, ax.w, ax.h, 9);
       ctx.fill();
+      if (hoverZoneId === 'autoX') {
+        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+        ctx.lineWidth = 1.8;
+        roundRect(ctx, ax.x, ax.y, ax.w, ax.h, 9);
+        ctx.stroke();
+      }
       ctx.fillStyle = settings.autoX ? '#c2a24a' : t.muted;
       ctx.font = `bold ${labelFs}px ${FONTS.kai}`;
       ctx.textAlign = 'center';
       ctx.fillText(`自动叉${settings.autoX ? '·开' : '·关'}`, ax.x + toolW / 2, ax.y + btnH / 2);
       zones.autoXBtn = ax;
-      // 呈堂（朱砂大印紧跟工具组；未集齐时淡印）
+      // 呈堂（朱砂大印紧跟工具组；未集齐时淡印；悬浮描金）
       y += btnH + 16;
       const allPlaced = ready && Object.keys(placed).length === n;
       const sealSize = Math.min(96, Math.round(toolW * 0.86));
@@ -4017,6 +4039,12 @@ function createPlayScene(manager, opts) {
       if (!allPlaced && !done) ctx.globalAlpha = 0.45;
       drawCinnabarSeal(ctx, sub.x + toolW / 2, sub.y + (sealSize + 6) / 2, sealSize, done ? '已破' : '呈堂', -0.05);
       ctx.globalAlpha = 1;
+      if (hoverZoneId === 'submit') {
+        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+        ctx.lineWidth = 2;
+        roundRect(ctx, sub.x - 4, sub.y - 2, sub.w + 8, sub.h + 4, 12);
+        ctx.stroke();
+      }
       zones.submitBtn = sub;
       return;
     }
@@ -4538,34 +4566,56 @@ function createPlayScene(manager, opts) {
   let hoverPerson = -1;
   let hoverRoomCells = new Set();
   let hoverObjCells = new Set();
+  let hoverZoneId = null;      // 功能键：'back'/'x'/'erase'/'undo'/'autoX'/'submit'/'howto'/'rotate'
+  let hoverCell = -1;          // 棋盘格（空格才高亮）
   if (typeof wx !== 'undefined' && wx.onHover) {
     wx.onHover(e => {
       const t0 = e.touches && e.touches[0];
-      let hp = -1;
-      if (t0 && ready && zones.clueCards) {
-        const hx = t0.clientX - clueX;
-        const hy = t0.clientY + clueScroll.offset - clueBandY;
+      let hp = -1, hz = null, hc = -1;
+      if (t0 && ready) {
+        const mx = t0.clientX, my = t0.clientY;
+        // 角色卡
+        const hx = mx - clueX;
+        const hy = my + clueScroll.offset - clueBandY;
         for (const z of zones.clueCards) {
           if (hit(z, hx, hy)) { hp = z.p; break; }
         }
-      }
-      if (hp !== hoverPerson) {
-        hoverPerson = hp;
-        hoverRoomCells = new Set();
-        hoverObjCells = new Set();
-        if (hp >= 0) {
-          board.clues.forEach(clue => {
-            if (clue.p !== hp) return;
-            const addObj = k => board.objects.forEach(o => {
-              if (o.key === k) { hoverObjCells.add(o.cell); if (o.span === 2) hoverObjCells.add(o.cell + 1); }
-            });
-            if (clue.objKey) addObj(clue.objKey);
-            if (clue.objKeys) clue.objKeys.forEach(addObj);
-            if (clue.room !== undefined) {
-              for (let i = 0; i < n * n; i++) if (board.roomAt[i] === clue.room) hoverRoomCells.add(i);
-            }
-          });
+        // 功能键（返回/工具/设置）
+        const btnZones = [
+          ['back', zones.back], ['x', zones.xBtn], ['erase', zones.eraseBtn],
+          ['undo', zones.undoBtn], ['autoX', zones.autoXBtn], ['submit', zones.submitBtn],
+          ['howto', zones.howtoBtn], ['rotate', zones.rotateBtn]
+        ];
+        for (const [k, z] of btnZones) {
+          if (z && hit(z, mx, my)) { hz = k; break; }
         }
+        // 棋盘格（不在卡上、不在键上时的空格）
+        if (hp < 0 && !hz) {
+          const i = cellAt(mx, my);
+          if (i >= 0 && placed[i] === undefined && board.occupiable[i]) hc = i;
+        }
+      }
+      if (hp !== hoverPerson || hz !== hoverZoneId || hc !== hoverCell) {
+        hoverZoneId = hz;
+        hoverCell = hc;
+        if (hp !== hoverPerson) {
+          hoverRoomCells = new Set();
+          hoverObjCells = new Set();
+          if (hp >= 0) {
+            board.clues.forEach(clue => {
+              if (clue.p !== hp) return;
+              const addObj = k => board.objects.forEach(o => {
+                if (o.key === k) { hoverObjCells.add(o.cell); if (o.span === 2) hoverObjCells.add(o.cell + 1); }
+              });
+              if (clue.objKey) addObj(clue.objKey);
+              if (clue.objKeys) clue.objKeys.forEach(addObj);
+              if (clue.room !== undefined) {
+                for (let i = 0; i < n * n; i++) if (board.roomAt[i] === clue.room) hoverRoomCells.add(i);
+              }
+            });
+          }
+        }
+        hoverPerson = hp;
         manager.invalidate();
       }
     });
@@ -4609,9 +4659,13 @@ function createPlayScene(manager, opts) {
       const hdrYCtl = (W > H) ? HDR_TOP : TOP_SAFE;
       // 返回钮：圆框 + 粗箭头（导航控件统一为按钮语义，不再是裸字符）
       const backC = { x: 12, y: hdrY + 2, w: 30, h: 30 };
-      ctx.strokeStyle = t.muted;
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = hoverZoneId === 'back' ? 'rgba(214,182,92,0.95)' : t.muted;
+      ctx.lineWidth = hoverZoneId === 'back' ? 2 : 1.4;
       ctx.beginPath(); ctx.arc(backC.x + 15, backC.y + 15, 14, 0, Math.PI * 2); ctx.stroke();
+      if (hoverZoneId === 'back') {
+        ctx.fillStyle = 'rgba(194,162,74,0.15)';
+        ctx.beginPath(); ctx.arc(backC.x + 15, backC.y + 15, 13, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.strokeStyle = t.fg;
       ctx.lineWidth = 2.4;
       ctx.lineCap = 'round';
@@ -4639,8 +4693,8 @@ function createPlayScene(manager, opts) {
       ctx.textAlign = 'center';
       // 玩法说明入口（圆框 ? 钮，关卡内随时查术语/手法）
       zones.howtoBtn = { x: hdrRight - 40, y: hdrYCtl + 2, w: 32, h: 32 };
-      ctx.strokeStyle = t.muted;
-      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = hoverZoneId === 'howto' ? 'rgba(214,182,92,0.95)' : t.muted;
+      ctx.lineWidth = hoverZoneId === 'howto' ? 2 : 1.4;
       ctx.beginPath(); ctx.arc(hdrRight - 24, hdrYCtl + 17, 14, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = t.muted;
       ctx.font = `bold 15px ${FONTS.song}`;
