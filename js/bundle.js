@@ -5213,7 +5213,7 @@ function themeInfo(th) {
   return { objs, rooms };
 }
 
-/* ---------- 主页：只保留 玩法说明 + 开始游戏 ---------- */
+/* ---------- 主页：只保留 玩法说明 + 开始游戏（入场淡入 + PC 悬浮描金） ---------- */
 function createHomeScene(manager) {
   const L = manager.L;
   const W = manager.view.width;
@@ -5222,6 +5222,20 @@ function createHomeScene(manager) {
   const modalScroll = createScroll();
   let modal = null; // 'howto'
   const zones = {};
+  const enterAt = Date.now();
+  let hoverBtn = null;   // 'start' | 'howto' | null
+  const ease = p => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
+
+  if (typeof wx !== 'undefined' && wx.onHover) {
+    wx.onHover(e => {
+      const t0 = e.touches && e.touches[0];
+      if (!t0) return;
+      const cx = t0.clientX - (W > H ? (W - Math.min(W, 640)) / 2 : 0);
+      const cy = t0.clientY;
+      const h = hit(zones.startBtn, cx, cy) ? 'start' : (hit(zones.howtoBtn, cx, cy) ? 'howto' : null);
+      if (h !== hoverBtn) { hoverBtn = h; manager.invalidate(); }
+    });
+  }
 
   const scene = {
     zones,
@@ -5237,6 +5251,11 @@ function createHomeScene(manager) {
       const OX = (W - CW) / 2;
       ctx.save();
       ctx.translate(OX, 0);
+      // 入场淡入上移（300ms easeOutCubic）
+      const enterP = ease((Date.now() - enterAt) / 300);
+      if (enterP < 1) manager.invalidate();
+      ctx.globalAlpha = enterP;
+      ctx.translate(0, (1 - enterP) * 16);
 
       // 内容块（印章+标题+副标题+双按钮）整体垂直居中，避免底部大片留空
       const blockH = 360;
@@ -5255,6 +5274,15 @@ function createHomeScene(manager) {
       drawButton(ctx, t, zones.startBtn, '开始游戏', { font: `bold 19px ${FONTS.kai}` });
       zones.howtoBtn = { x: 32, y: sealY + 290, w: CW - 64, h: 48 };
       drawButton(ctx, t, zones.howtoBtn, '玩法说明', { ghost: true, font: `17px ${FONTS.kai}` });
+      // PC 悬浮：描金高亮（impeccable 式 hover 反馈）
+      const hovRect = hoverBtn === 'start' ? zones.startBtn : (hoverBtn === 'howto' ? zones.howtoBtn : null);
+      if (hovRect) {
+        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+        ctx.lineWidth = 2;
+        roundRect(ctx, hovRect.x - 2, hovRect.y - 2, hovRect.w + 4, hovRect.h + 4, 12);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
       ctx.restore();
 
       ctx.font = '20px sans-serif';
@@ -5297,7 +5325,54 @@ function createHomeScene(manager) {
   return scene;
 }
 
-/* ---------- 主题选择页：主题卡（器物含可坐标注 + 区域清单 + 进度） ---------- */
+/* ---------- 棋盘缩略图（地板 + 墙线 + 物件；对应 cases.js 的 drawThumb） ---------- */
+const { drawSVG } = require('src/ui/svgmini.js');
+function drawThumb(ctx, L, data, board, x, y, w) {
+  const n = board.size;
+  const cell = w / n;
+  const objAt = {};
+  board.objects.forEach(o => { objAt[o.cell] = o; });
+  ctx.save();
+  ctx.translate(x, y);
+  for (let i = 0; i < n * n; i++) {
+    const r = Math.floor(i / n), c = i % n;
+    const fkey = board.rooms[board.roomAt[i]].floor;
+    const fimg = data.floorImg(fkey, board.theme && board.theme.id);
+    if (fimg) ctx.drawImage(fimg, c * cell, r * cell, cell, cell);
+    else {
+      ctx.fillStyle = data.FLOOR_COLORS[fkey] || '#f4f0e6';
+      ctx.fillRect(c * cell, r * cell, cell + 0.5, cell + 0.5);
+    }
+  }
+  ctx.strokeStyle = '#161616';
+  ctx.lineWidth = Math.max(1.5, cell * 0.07);
+  ctx.beginPath();
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const i = r * n + c;
+      const room = board.roomAt[i];
+      if (r === 0 || board.roomAt[i - n] !== room) { ctx.moveTo(c * cell, r * cell); ctx.lineTo((c + 1) * cell, r * cell); }
+      if (r === n - 1 || board.roomAt[i + n] !== room) { ctx.moveTo(c * cell, (r + 1) * cell); ctx.lineTo((c + 1) * cell, (r + 1) * cell); }
+      if (c === 0 || board.roomAt[i - 1] !== room) { ctx.moveTo(c * cell, r * cell); ctx.lineTo(c * cell, (r + 1) * cell); }
+      if (c === n - 1 || board.roomAt[i + 1] !== room) { ctx.moveTo((c + 1) * cell, r * cell); ctx.lineTo((c + 1) * cell, (r + 1) * cell); }
+    }
+  }
+  ctx.stroke();
+  Object.keys(objAt).forEach(k => {
+    const i = Number(k);
+    const r = Math.floor(i / n), c = i % n;
+    const oimg = data.objectImg(objAt[i].key, board.theme && board.theme.id);
+    if (oimg) ctx.drawImage(oimg, c * cell + cell * 0.07, r * cell + cell * 0.07, cell * 0.86, cell * 0.86);
+    else {
+      const svg = L.Art.OBJECT_SPRITES[objAt[i].key];
+      if (svg) drawSVG(ctx, svg, c * cell + cell * 0.12, r * cell + cell * 0.12, cell * 0.76, cell * 0.76);
+    }
+  });
+  ctx.restore();
+}
+
+/* ---------- 选案发地（主题+关卡合并页）：主题卡手风琴展开关卡网格（缩略图）。
+ * 动效：入场交错 fade+slide、展开 ease-out、PC 悬浮描金上浮（impeccable 式反馈）。 */
 function createThemeScene(manager) {
   const L = manager.L;
   const W = manager.view.width;
@@ -5305,7 +5380,26 @@ function createThemeScene(manager) {
   const scroll = createScroll();
   const modalScroll = createScroll();
   let modal = null;
-  const zones = { back: { x: 0, y: headerTop(W, H), w: 56, h: 44 }, themeCards: [] };
+  const zones = { back: { x: 0, y: headerTop(W, H), w: 56, h: 44 }, themeCards: [], caseCards: [] };
+  let expandedId = null;
+  let expandAt = 0;
+  let hoverId = null;                       // 'th:<id>' | 'case:<seed>'
+  const enterAt = Date.now();
+  const ease = p => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
+  const contW = () => (W > H ? Math.min(W, 860) : W);
+
+  if (typeof wx !== 'undefined' && wx.onHover) {
+    wx.onHover(e => {
+      const t0 = e.touches && e.touches[0];
+      if (!t0) return;
+      const cx = t0.clientX - (W - contW()) / 2;
+      const cy = t0.clientY + scroll.offset;
+      let id = null;
+      for (const z of zones.themeCards) if (hit(z, cx, cy)) { id = 'th:' + z.th.id; break; }
+      if (!id) for (const z of zones.caseCards) if (hit(z, cx, cy)) { id = 'case:' + z.c.seed; break; }
+      if (id !== hoverId) { hoverId = id; manager.invalidate(); }
+    });
+  }
 
   const scene = {
     zones,
@@ -5316,34 +5410,60 @@ function createThemeScene(manager) {
       ctx.fillStyle = t.bg;
       ctx.fillRect(0, 0, W, H);
 
-      const CW = W > H ? Math.min(W, 640) : W;
+      const CW = contW();
       const OX = (W - CW) / 2;
       ctx.save();
       ctx.translate(OX, -scroll.offset);
 
-      let y = headerTop(W, H) + 64;
+      const now = Date.now();
       zones.themeCards = [];
-      data.themeLadders().forEach(th => {
+      zones.caseCards = [];
+      let y = headerTop(W, H) + 64;
+      data.themeLadders().forEach((th, thIdx) => {
+        // 入场交错（70ms 阶梯，260ms easeOutCubic）
+        const enterP = ease((now - enterAt - thIdx * 70) / 260);
+        if (enterP < 1) manager.invalidate();
         const info = themeInfo(th);
         ctx.font = `13px ${FONTS.song}`;
         const objLines = wrapText(ctx, `器物：${info.objs}`, CW - 96);
         const roomLines = wrapText(ctx, `区域：${info.rooms}`, CW - 96);
         const cardH = 34 + objLines.length * 18 + roomLines.length * 18 + 14;
-        const rect = { x: 24, y, w: CW - 48, h: cardH, th };
+        const hov = hoverId === 'th:' + th.id;
+        const rect = { x: 24, y: y - (hov ? 2 : 0) - (1 - enterP) * 14, w: CW - 48, h: cardH, th };
         const doneCount = th.cases.filter(c => {
           const p = L.Storage.getProgress(c.seed);
           return p && p.done;
         }).length;
+        ctx.save();
+        ctx.globalAlpha = enterP;
+        if (hov) {
+          ctx.shadowColor = 'rgba(214,182,92,0.35)';
+          ctx.shadowBlur = 16;
+        }
         fillPaper(ctx, rect.x, rect.y, rect.w, rect.h, 12, '#f2ecdd');
+        ctx.restore();
+        if (hov) {
+          ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+          ctx.lineWidth = 1.8;
+          roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 12);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#9a7526';
         ctx.font = `bold 17px ${FONTS.kai}`;
         ctx.fillText(`【${th.name}】${th.caseName}`, rect.x + 14, rect.y + 18);
+        // 展开/收起指示
+        const expanded = expandedId === th.id;
+        ctx.fillStyle = '#9a7526';
+        ctx.font = `bold 14px ${FONTS.kai}`;
         ctx.textAlign = 'right';
+        ctx.fillText(expanded ? '收起 ▲' : '展开 ▼', rect.x + rect.w - 14, rect.y + 18);
         ctx.fillStyle = doneCount ? t.ok : t.muted;
         ctx.font = `13px ${FONTS.song}`;
-        ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14, rect.y + 18);
+        const cntW = ctx.measureText(expanded ? '收起 ▲' : '展开 ▼').width + 12;
+        ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14 - cntW - 56, rect.y + 18);
         ctx.textAlign = 'left';
         ctx.fillStyle = '#2a2620';
         let ly = rect.y + 36;
@@ -5351,6 +5471,17 @@ function createThemeScene(manager) {
         ctx.fillStyle = '#6b5f3a';
         roomLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 18; });
         zones.themeCards.push(rect);
+
+        // 手风琴：展开的关卡网格（ease-out 下滑 + 淡入）
+        if (expanded) {
+          const exP = ease((now - expandAt) / 240);
+          if (exP < 1) manager.invalidate();
+          ctx.save();
+          ctx.globalAlpha = exP;
+          y = drawCaseGrid(ctx, t, th, y + cardH + 8 - (1 - exP) * 12, CW, enterP) + (1 - exP) * 12;
+          ctx.restore();
+          y += 4;
+        }
         y += cardH + 12;
       });
       scroll.setRange(y + 16, H);
@@ -5376,11 +5507,21 @@ function createThemeScene(manager) {
         return;
       }
       if (hit(zones.back, x, y)) { manager.back(); return; }
-      const cx = x - (W > H ? (W - Math.min(W, 640)) / 2 : 0);
+      const cx = x - (W - contW()) / 2;
       const cy = y + scroll.offset;
+      for (const rect of zones.caseCards) {
+        if (hit(rect, cx, cy) && !rect.locked) {
+          const th = rect.th;
+          const sameDiff = th.cases.filter(c => c.diff === rect.c.diff);
+          manager.push(createPlayScene(manager, makeCaseOpts(L, th, rect.c.diff, sameDiff.indexOf(rect.c))));
+          return;
+        }
+      }
       for (const rect of zones.themeCards) {
         if (hit(rect, cx, cy)) {
-          manager.push(createDiffScene(manager, rect.th));
+          expandedId = expandedId === rect.th.id ? null : rect.th.id;
+          expandAt = Date.now();
+          manager.invalidate();
           return;
         }
       }
@@ -5390,139 +5531,71 @@ function createThemeScene(manager) {
     onTouchMove(x, y) { (modal ? modalScroll : scroll).onMove(y); },
     onTouchEnd() { scroll.onEnd(); modalScroll.onEnd(); }
   };
-  return scene;
-}
 
-/* ---------- 主题内选案页：按难度分组、组内列案件；最低难度初始解锁，
- *   破上一难度任一案解锁下一难度，难度内破前一案解锁下一案 ---------- */
-function createDiffScene(manager, th) {
-  const L = manager.L;
-  const W = manager.view.width;
-  const H = manager.view.height;
-  const scroll = createScroll();
-  const zones = { back: { x: 0, y: headerTop(W, H), w: 56, h: 44 }, diffRows: [] };
-  // 按难度分档分组（5~6 非常简单 … 15~16 大师），组内按尺寸升序
-  const rows = [];
-  th.cases.forEach(c => {
-    const band = bandOf(c.size);
-    let row = rows.find(r => r.band === band);
-    if (!row) { row = { band, cases: [] }; rows.push(row); }
-    row.cases.push(c);
-  });
-
-  const scene = {
-    zones,
-    recreate() { return createDiffScene(manager, th); },
-
-    render(ctx) {
-      const t = theme();
-      ctx.fillStyle = t.bg;
-      ctx.fillRect(0, 0, W, H);
-
-      const CW = W > H ? Math.min(W, 640) : W;
-      const OX = (W - CW) / 2;
-      ctx.save();
-      ctx.translate(OX, -scroll.offset);
-
-      let y = headerTop(W, H) + 64;
-      zones.diffRows = [];
-      let prevDiffPassed = true;   // 上一难度已有案破获 → 本难度解锁；首难度恒解锁
-      rows.forEach(row => {
-        const doneFlags = row.cases.map(c => {
-          const p = L.Storage.getProgress(c.seed);
-          return !!(p && p.done);
-        });
-        const doneCount = doneFlags.filter(Boolean).length;
-        const diffUnlocked = prevDiffPassed;
-        prevDiffPassed = doneCount > 0;
-
-        // 难度组头（不可点）：分档名 + 尺寸区间 + 进度
-        const labelText = row.cases.length > 1
-          ? `${row.band} · ${row.cases[0].size}×${row.cases[0].size} ~ ${row.cases[row.cases.length - 1].size}×${row.cases[row.cases.length - 1].size}`
-          : `${row.band} · ${row.cases[0].size}×${row.cases[0].size}`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = diffUnlocked ? t.gold : t.muted;
-        ctx.font = '14px sans-serif';
-        ctx.fillText(labelText, 32, y + 9);
-        ctx.textAlign = 'right';
-        ctx.fillStyle = t.muted;
-        ctx.font = '11px sans-serif';
-        ctx.fillText(`已破 ${doneCount}/${row.cases.length}`, CW - 32, y + 9);
-        y += 26;
-
-        // 案件行：难度内链式解锁（破前一案开下一案）
-        let casePrev = diffUnlocked;
-        row.cases.forEach((c, ci) => {
-          const unlocked = casePrev;
-          casePrev = doneFlags[ci];
-          const rect = { x: 24, y, w: CW - 48, h: 40, row, ci, seed: c.seed, size: c.size, diff: c.diff, locked: !unlocked };
-          ctx.fillStyle = t.card;
-          roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 10);
-          ctx.fill();
-          ctx.textAlign = 'left';
-          ctx.fillStyle = unlocked ? t.fg : t.muted;
-          ctx.font = '14px sans-serif';
-          if (unlocked) {
-            ctx.fillText(`${c.size}×${c.size}`, rect.x + 16, rect.y + 20);
-          } else {
-            const seal = data.lockSeal();
-            if (seal) {
-              const sh = 22, sw = sh * 360 / 205;
-              ctx.drawImage(seal, rect.x + 14, rect.y + 20 - sh / 2, sw, sh);
-              ctx.fillText(`${c.size}×${c.size}`, rect.x + 14 + sw + 8, rect.y + 20);
-            } else {
-              drawLockSeal(ctx, rect.x + 26, rect.y + 20, 20, '锁');
-              ctx.fillText(`${c.size}×${c.size}`, rect.x + 42, rect.y + 20);
-            }
-          }
-          ctx.textAlign = 'right';
-          const prog = L.Storage.getProgress(c.seed);
-          ctx.fillStyle = prog && prog.done ? t.ok : t.muted;
-          ctx.font = '12px sans-serif';
-          ctx.fillText(!unlocked ? '破前一案解锁'
-            : (prog && prog.done ? `已破 · ${fmtTime(prog.seconds || 0)}`
-              : (prog && prog.placed && Object.keys(prog.placed).length ? '进行中' : '未开始')),
-            rect.x + rect.w - 14, rect.y + 20);
-          ctx.textAlign = 'center';
-          zones.diffRows.push(rect);
-          y += 46;
-        });
-        y += 12;
-      });
-      scroll.setRange(y + 16, H);
-      ctx.restore();
-
-      ctx.fillStyle = t.bg;
-      ctx.fillRect(0, 0, W, headerTop(W, H) + 52);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = t.fg;
-      ctx.font = '20px sans-serif';
-      ctx.fillText('←', 14, headerTop(W, H) + 26);
-      ctx.font = '15px sans-serif';
-      ctx.fillText(`【${th.name}】${th.caseName}`, 44, headerTop(W, H) + 26);
-    },
-
-    onTap(x, y) {
-      if (hit(zones.back, x, y)) { manager.back(); return; }
-      const cx = x - (W > H ? (W - Math.min(W, 640)) / 2 : 0);
-      const cy = y + scroll.offset;
-      for (const rect of zones.diffRows) {
-        if (hit(rect, cx, cy) && !rect.locked) {
-          // 案件行直进（所见即所选；ci 换算为该难度键内的序号）
-          const c = rect.row.cases[rect.ci];
-          const sameDiff = th.cases.filter(x => x.diff === rect.diff);
-          manager.push(createPlayScene(manager, makeCaseOpts(L, th, rect.diff, sameDiff.indexOf(c))));
-          return;
-        }
+  /* 关卡网格：缩略图 + 案名 + 难度·尺寸 + 状态；逐案链式解锁（前一案破 → 下一案开） */
+  function drawCaseGrid(ctx, t, th, gridY, CW, alpha) {
+    const cols = CW > 640 ? 3 : 2;
+    const gap = 10;
+    const cw = (CW - 48 - (cols - 1) * gap) / cols;
+    const thumbH = cw;
+    const cardH = thumbH + 48;
+    let prevDone = true;
+    th.cases.forEach((c, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const hov = hoverId === 'case:' + c.seed;
+      const x = 24 + col * (cw + gap);
+      const y0 = gridY + row * (cardH + gap) - (hov ? 2 : 0);
+      const prog = L.Storage.getProgress(c.seed);
+      const unlocked = prevDone;
+      const done = !!(prog && prog.done);
+      prevDone = done;
+      const rect = { x, y: y0, w: cw, h: cardH, c, th, locked: !unlocked };
+      fillPaper(ctx, x, y0, cw, cardH, 10, '#f2ecdd');
+      if (hov && unlocked) {
+        ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+        ctx.lineWidth = 1.8;
+        roundRect(ctx, x, y0, cw, cardH, 10);
+        ctx.stroke();
       }
-    },
-
-    onTouchStart(x, y) { scroll.onStart(y); },
-    onTouchMove(x, y) { scroll.onMove(y); },
-    onTouchEnd() { scroll.onEnd(); }
-  };
+      // 缩略图
+      const b = data.getBoard(c.seed, c.diff);
+      if (b) drawThumb(ctx, L, data, b, x + 4, y0 + 4, cw - 8);
+      else {
+        ctx.fillStyle = t.muted;
+        ctx.textAlign = 'center';
+        ctx.font = `12px ${FONTS.song}`;
+        ctx.fillText('整理卷宗中…', x + cw / 2, y0 + thumbH / 2);
+      }
+      // 案名 + 难度·尺寸
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = unlocked ? '#2a2620' : '#8a8578';
+      ctx.font = `bold 13px ${FONTS.kai}`;
+      ctx.fillText(`「${data.caseNameAt(c.diff, c.i)}」`, x + cw / 2, y0 + thumbH + 18);
+      ctx.fillStyle = unlocked ? t.muted : '#a39b7e';
+      ctx.font = `11px ${FONTS.song}`;
+      ctx.fillText(`${bandOf(c.size)} · ${c.size}×${c.size}`, x + cw / 2, y0 + thumbH + 36);
+      // 锁态：整卡压暗 + 中央镂空朱砂印
+      if (!unlocked) {
+        ctx.fillStyle = 'rgba(20,18,14,0.45)';
+        roundRect(ctx, x, y0, cw, cardH, 10);
+        ctx.fill();
+        drawLockSeal(ctx, x + cw / 2, y0 + thumbH / 2, 44, '未解锁');
+      } else if (done) {
+        ctx.fillStyle = 'rgba(62,142,78,0.9)';
+        ctx.font = `bold 12px ${FONTS.kai}`;
+        ctx.textAlign = 'right';
+        ctx.fillText('已破', x + cw - 8, y0 + 12);
+      } else if (prog && prog.placed && Object.keys(prog.placed).length) {
+        ctx.fillStyle = '#9a7526';
+        ctx.font = `bold 12px ${FONTS.kai}`;
+        ctx.textAlign = 'right';
+        ctx.fillText('进行中', x + cw - 8, y0 + 12);
+      }
+      zones.caseCards.push(rect);
+    });
+    return gridY + Math.ceil(th.cases.length / cols) * (cardH + gap) + 4;
+  }
   return scene;
 }
 
