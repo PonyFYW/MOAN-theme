@@ -5239,7 +5239,11 @@ function createHomeScene(manager) {
 
   const scene = {
     zones,
-    onShow() {},
+    onShow() {
+      // 入场动画驱动：渲染中置脏不一定有下一帧，用定时器保帧（防动画卡死）
+      const timer = setInterval(() => manager.invalidate(), 33);
+      setTimeout(() => clearInterval(timer), 450);
+    },
     recreate() { return createHomeScene(manager); },
 
     render(ctx) {
@@ -5403,6 +5407,11 @@ function createThemeScene(manager) {
 
   const scene = {
     zones,
+    onShow() {
+      // 入场动画驱动：渲染中置脏不一定有下一帧，用定时器保帧（防动画卡死）
+      const timer = setInterval(() => manager.invalidate(), 33);
+      setTimeout(() => clearInterval(timer), 500);
+    },
     recreate() { return createThemeScene(manager); },
 
     render(ctx) {
@@ -5427,7 +5436,7 @@ function createThemeScene(manager) {
         ctx.font = `13px ${FONTS.song}`;
         const objLines = wrapText(ctx, `器物：${info.objs}`, CW - 96);
         const roomLines = wrapText(ctx, `区域：${info.rooms}`, CW - 96);
-        const cardH = 34 + objLines.length * 18 + roomLines.length * 18 + 14;
+        const cardH = 38 + objLines.length * 22 + roomLines.length * 22 + 14;
         const hov = hoverId === 'th:' + th.id;
         const rect = { x: 24, y: y - (hov ? 2 : 0) - (1 - enterP) * 14, w: CW - 48, h: cardH, th };
         const doneCount = th.cases.filter(c => {
@@ -5466,10 +5475,10 @@ function createThemeScene(manager) {
         ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14 - cntW - 56, rect.y + 18);
         ctx.textAlign = 'left';
         ctx.fillStyle = '#2a2620';
-        let ly = rect.y + 36;
-        objLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 18; });
+        let ly = rect.y + 38;
+        objLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 22; });
         ctx.fillStyle = '#6b5f3a';
-        roomLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 18; });
+        roomLines.forEach(s => { ctx.fillText(s, rect.x + 14, ly); ly += 22; });
         zones.themeCards.push(rect);
 
         // 手风琴：展开的关卡网格（ease-out 下滑 + 淡入）
@@ -5487,16 +5496,27 @@ function createThemeScene(manager) {
       scroll.setRange(y + 16, H);
       ctx.restore();
 
-      // 页眉：返回 + 标题（与对局页标题同高）
+      // 页眉：返回（与对局页一致的圆框箭头钮）+ 标题
       ctx.fillStyle = t.bg;
       ctx.fillRect(0, 0, W, headerTop(W, H) + 52);
+      const backC = { x: 12, y: headerTop(W, H) + 11, w: 30, h: 30 };
+      ctx.strokeStyle = t.muted;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(backC.x + 15, backC.y + 15, 14, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = t.fg;
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(backC.x + 18, backC.y + 8);
+      ctx.lineTo(backC.x + 10, backC.y + 15);
+      ctx.lineTo(backC.x + 18, backC.y + 22);
+      ctx.stroke();
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = t.fg;
-      ctx.font = '20px sans-serif';
-      ctx.fillText('←', 14, headerTop(W, H) + 26);
       ctx.font = `bold 19px ${FONTS.kai}`;
-      ctx.fillText('选择案发地', 44, headerTop(W, H) + 26);
+      ctx.fillText('选择案发地', 52, headerTop(W, H) + 26);
 
       if (modal === 'howto') renderHowtoModal(ctx, t, W, H, zones, modalScroll);
     },
@@ -5521,6 +5541,9 @@ function createThemeScene(manager) {
         if (hit(rect, cx, cy)) {
           expandedId = expandedId === rect.th.id ? null : rect.th.id;
           expandAt = Date.now();
+          // 展开动画驱动：定时器保帧
+          const timer = setInterval(() => manager.invalidate(), 33);
+          setTimeout(() => clearInterval(timer), 320);
           manager.invalidate();
           return;
         }
@@ -5575,22 +5598,27 @@ function createThemeScene(manager) {
       ctx.fillStyle = unlocked ? t.muted : '#a39b7e';
       ctx.font = `11px ${FONTS.song}`;
       ctx.fillText(`${bandOf(c.size)} · ${c.size}×${c.size}`, x + cw / 2, y0 + thumbH + 36);
-      // 锁态：整卡压暗 + 中央镂空朱砂印
+      // 锁态：整卡压暗 + 中央镂空朱砂印（放大一倍）
       if (!unlocked) {
         ctx.fillStyle = 'rgba(20,18,14,0.45)';
         roundRect(ctx, x, y0, cw, cardH, 10);
         ctx.fill();
-        drawLockSeal(ctx, x + cw / 2, y0 + thumbH / 2, 44, '未解锁');
+        drawLockSeal(ctx, x + cw / 2, y0 + thumbH / 2, 88, '未解锁');
       } else if (done) {
         ctx.fillStyle = 'rgba(62,142,78,0.9)';
         ctx.font = `bold 12px ${FONTS.kai}`;
         ctx.textAlign = 'right';
         ctx.fillText('已破', x + cw - 8, y0 + 12);
       } else if (prog && prog.placed && Object.keys(prog.placed).length) {
-        ctx.fillStyle = '#9a7526';
-        ctx.font = `bold 12px ${FONTS.kai}`;
+        // 进行中：描边加粗放大（小字在复杂底图上没有存在感）
+        ctx.font = `bold 15px ${FONTS.kai}`;
         ctx.textAlign = 'right';
-        ctx.fillText('进行中', x + cw - 8, y0 + 12);
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(20,18,14,0.85)';
+        ctx.strokeText('进行中', x + cw - 8, y0 + 16);
+        ctx.fillStyle = '#c2a24a';
+        ctx.fillText('进行中', x + cw - 8, y0 + 16);
       }
       zones.caseCards.push(rect);
     });
