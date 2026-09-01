@@ -3941,6 +3941,14 @@ function createPlayScene(manager, opts) {
       ctx.lineWidth = 8;
       ctx.strokeRect(hx + 2, hy + 2, cell - 4, cell - 4);
     }
+    // 悬浮物件高亮（跨格物件画整体外框，与区域框线同粗）
+    if (ready && hoverObj) {
+      const ow = (hoverObj.span === 2 ? 2 : 1) * cell;
+      const ox = boardX + M.col(hoverObj.cell, n) * cell, oy = boardY + M.row(hoverObj.cell, n) * cell;
+      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(ox + 2, oy + 2, ow - 4, cell - 4);
+    }
     // 长按进度环：满 RING_SHOW_MS 才出现（单击不闪环）；线宽 12（v3.2 再加粗一倍）
     if (holdCell >= 0 && !holdFired) {
       const elapsed = Date.now() - holdStart;
@@ -4563,10 +4571,11 @@ function createPlayScene(manager, opts) {
   let hoverObjCells = new Set();
   let hoverZoneId = null;      // 功能键：'back'/'x'/'erase'/'undo'/'autoX'/'submit'/'howto'/'rotate'
   let hoverCell = -1;          // 棋盘格（空格才高亮）
+  let hoverObj = null;         // 悬浮物件（外框高亮 + 棋盘下方名签）
   if (typeof wx !== 'undefined' && wx.onHover) {
     wx.onHover(e => {
       const t0 = e.touches && e.touches[0];
-      let hp = -1, hz = null, hc = -1;
+      let hp = -1, hz = null, hc = -1, ho = null;
       if (t0 && ready) {
         const mx = t0.clientX, my = t0.clientY;
         // 角色卡
@@ -4584,15 +4593,17 @@ function createPlayScene(manager, opts) {
         for (const [k, z] of btnZones) {
           if (z && hit(z, mx, my)) { hz = k; break; }
         }
-        // 棋盘格（不在卡上、不在键上时的空格）
+        // 棋盘格（不在卡上、不在键上：物件格优先于空格预演）
         if (hp < 0 && !hz) {
           const i = cellAt(mx, my);
-          if (i >= 0 && placed[i] === undefined && board.occupiable[i]) hc = i;
+          if (i >= 0 && objAt[i]) ho = objAt[i];
+          else if (i >= 0 && placed[i] === undefined && board.occupiable[i]) hc = i;
         }
       }
-      if (hp !== hoverPerson || hz !== hoverZoneId || hc !== hoverCell) {
+      if (hp !== hoverPerson || hz !== hoverZoneId || hc !== hoverCell || ho !== hoverObj) {
         hoverZoneId = hz;
         hoverCell = hc;
+        hoverObj = ho;
         if (hp !== hoverPerson) {
           hoverRoomCells = new Set();
           hoverObjCells = new Set();
@@ -4729,6 +4740,22 @@ function createPlayScene(manager, opts) {
       drawBoard(ctx, t);
       drawToolbar(ctx, t);
       drawClues(ctx, t);
+
+      // 悬浮物件名签（棋盘正下方居中，与 toast 同位；toast 显示期间让位）
+      if (ready && hoverObj && Date.now() >= toastUntil) {
+        const label = `${hoverObj.name} · ${hoverObj.sittable ? '可坐' : '不可坐'}`;
+        const lx = LAND ? boardX + boardSide / 2 : W / 2;
+        const ly = LAND ? Math.min(boardY + boardSide + 10, H - 40) : toolY - 40;
+        ctx.font = '12px sans-serif';
+        const lw = ctx.measureText(label).width + 32;
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        roundRect(ctx, lx - lw / 2, ly, lw, 30, 15);
+        ctx.fill();
+        ctx.fillStyle = '#f5eeda';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, lx, ly + 15);
+      }
 
       // toast（横屏：棋盘正下方居中；竖屏：功能条上方）
       if (Date.now() < toastUntil) {
