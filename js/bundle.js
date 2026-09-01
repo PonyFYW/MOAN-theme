@@ -3942,14 +3942,12 @@ function createPlayScene(manager, opts) {
         });
       }
     }
-    // 悬浮格高亮（PC：光标下的空格 = 预演落点）
+    // 悬浮格高亮（PC：光标下的空格 = 预演落点；只描边，与区域框线同粗）
     if (ready && hoverCell >= 0) {
       const hx = boardX + M.col(hoverCell, n) * cell, hy = boardY + M.row(hoverCell, n) * cell;
-      ctx.fillStyle = 'rgba(194,162,74,0.16)';
-      ctx.fillRect(hx, hy, cell, cell);
-      ctx.strokeStyle = 'rgba(214,182,92,0.85)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(hx + 1, hy + 1, cell - 2, cell - 2);
+      ctx.strokeStyle = 'rgba(214,182,92,0.95)';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(hx + 2, hy + 2, cell - 4, cell - 4);
     }
     // 长按进度环
     if (holdCell >= 0 && !holdFired) {
@@ -4092,13 +4090,15 @@ function createPlayScene(manager, opts) {
     return String(html).replace(/<[^>]+>/g, '');
   }
 
-  /* 棋盘 token：裁底人像（透明底、缩小露出地板）+ 左上角简称徽章 */
+  /* 棋盘 token：裁底人像（透明底、居中占格 70%——不撑满格，露出地板与物件）+ 左上角简称徽章 */
   function drawToken(ctx, p, x, y) {
     const img = data.cut(p, board && board.theme && board.theme.id);
+    const tw = cell * 0.7, th = cell * 0.7;
+    const tx = x + (cell - tw) / 2, ty = y + (cell - th) / 2;
     if (img) {
-      ctx.drawImage(img, x + cell * 0.06, y + cell * 0.02, cell * 0.88, cell * 0.96);
+      ctx.drawImage(img, tx, ty, tw, th);
     } else {
-      drawSVG(ctx, L.Art.avatarSVG(p.avatar), x + cell * 0.04, y + cell * 0.04, cell * 0.92, cell * 0.92);
+      drawSVG(ctx, L.Art.avatarSVG(p.avatar), tx, ty, tw, th);
     }
     // 简称：粗体描边字（无背景框，人物色填充）
     const bfs = Math.max(13, cell * 0.17);
