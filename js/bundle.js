@@ -2667,10 +2667,10 @@ const PALETTES = {
 
 /* 字体栈：
  * kai  = 风格化字（案名/栏头/卡片姓名/印章/区域名/坐标）
- * song = 功能正文统一微软雅黑（证词/通用线索/按钮/说明/弹层；非 Windows 设备回退苹方/Noto Sans SC） */
+ * song = 功能正文（证词/通用线索/按钮/说明/弹层）：内嵌思源黑体 MoanSans 优先，回退微软雅黑/苹方/Noto Sans SC */
 const FONTS = {
   kai: '"KaiTi","STKaiti","Kaiti SC","楷体",serif',
-  song: '"Microsoft YaHei","PingFang SC","Noto Sans SC","微软雅黑",sans-serif'
+  song: '"MoanSans","Microsoft YaHei","PingFang SC","Noto Sans SC","微软雅黑",sans-serif'
 };
 
 const current = 'dark';   // 仅深色模式（浅色模式已下线）
