@@ -4155,7 +4155,7 @@ function createPlayScene(manager, opts) {
     let ly = y + 26;
     lines.forEach(wl => {
       ctx.fillStyle = '#2a2620';
-      ctx.font = `bold 14px ${FONTS.song}`;   // T3 正文级
+      ctx.font = `bold 16px ${FONTS.song}`;   // T3 正文级（线索字号整体放大 2 号）
       ctx.fillText(wl.text, gx + 10, ly);
       ly += 18;
     });
@@ -4214,7 +4214,7 @@ function createPlayScene(manager, opts) {
     const cardW = (clueW - PADX * 2 - (COLS - 1) * GAP) / COLS;
     const avSize = cardW - 10;                      // 色卡内头像（四周 5px 色边）
     const nameH = 32;
-    const clueFs = LAND ? 14 : 12;
+    const clueFs = LAND ? 16 : 14;   // 线索字号整体放大 2 号
     const lineH = clueFs + 5;
     const peopleCards = [];
     board.people.forEach(p => {
@@ -4752,11 +4752,11 @@ function createPlayScene(manager, opts) {
       drawToolbar(ctx, t);
       drawClues(ctx, t);
 
-      // 悬浮物件名签（棋盘正下方居中，与 toast 同位；toast 显示期间让位）
+      // 悬浮物件名签（横屏：最后一行格子中线、横向居中棋盘；竖屏：功能条上方；toast 期间让位）
       if (ready && hoverObj && Date.now() >= toastUntil) {
         const label = `${hoverObj.name} · ${hoverObj.sittable ? '可坐' : '不可坐'}`;
         const lx = LAND ? boardX + boardSide / 2 : W / 2;
-        const ly = LAND ? Math.min(boardY + boardSide + 10, H - 40) : toolY - 40;
+        const ly = LAND ? boardY + (n - 0.5) * cell - 15 : toolY - 40;
         ctx.font = '12px sans-serif';
         const lw = ctx.measureText(label).width + 32;
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
