@@ -4155,7 +4155,7 @@ function createPlayScene(manager, opts) {
     let ly = y + 26;
     lines.forEach(wl => {
       ctx.fillStyle = '#2a2620';
-      ctx.font = `bold 16px ${FONTS.song}`;   // T3 正文级（线索字号整体放大 2 号）
+      ctx.font = `bold ${LAND ? 15 : 13}px ${FONTS.song}`;   // 与证词字号一致
       ctx.fillText(wl.text, gx + 10, ly);
       ly += 18;
     });
@@ -4214,7 +4214,7 @@ function createPlayScene(manager, opts) {
     const cardW = (clueW - PADX * 2 - (COLS - 1) * GAP) / COLS;
     const avSize = cardW - 10;                      // 色卡内头像（四周 5px 色边）
     const nameH = 32;
-    const clueFs = LAND ? 16 : 14;   // 线索字号整体放大 2 号
+    const clueFs = LAND ? 15 : 13;   // 线索字号（通用线索与证词一致）
     const lineH = clueFs + 5;
     const peopleCards = [];
     board.people.forEach(p => {
@@ -4228,9 +4228,9 @@ function createPlayScene(manager, opts) {
       const lines = wrapText(ctx, text, cardW - 16);
       peopleCards.push({ p, lines });
     });
-    // 统一尺寸：证词盒加高（约两倍行高空间），所有卡同高、证词垂直居中
+    // 统一尺寸：证词盒高刚好容纳本局最长线索（矩形而非方形），所有卡同高、证词垂直居中
     const maxLines = Math.max(1, ...peopleCards.map(c => c.lines.length));
-    const boxH = maxLines * lineH * 2 + 16;
+    const boxH = maxLines * lineH + 16;
     const uniH = 5 + avSize + nameH + 5 + boxH;
     // 行绘制（全局统一高度 uniH；行内同高）
     for (let r0 = 0; r0 < peopleCards.length; r0 += COLS) {
