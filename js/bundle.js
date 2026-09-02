@@ -3476,8 +3476,19 @@ function createPlayScene(manager, opts) {
 
   function toggleMark(i, kind) {
     if (placed[i] !== undefined || !board.occupiable[i] || done) return;
-    // 已打叉的格子：除擦除外的操作一律不改写（防误触覆盖排除结论；要去掉叉请用 ⌫ 擦除）
-    if (hasAnyX(i)) return;
+    // 已打叉的格子：其他操作一律不改写（防误触覆盖排除结论）；
+    // 例外：选中排除时点叉 = 取消叉（手动 'x' 与联动 'ax' 一并清除）
+    if (hasAnyX(i)) {
+      if (kind !== 'x') return;
+      pushUndo();
+      Object.keys(marks[i]).forEach(pid => {
+        if (marks[i][pid] === 'x' || marks[i][pid] === 'ax') delete marks[i][pid];
+      });
+      if (!Object.keys(marks[i]).length) delete marks[i];
+      ensureTimer();
+      afterChange();
+      return;
+    }
     pushUndo();
     marks[i] = marks[i] || {};
     if (marks[i][selected] === kind) delete marks[i][selected];
