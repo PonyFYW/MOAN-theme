@@ -3774,9 +3774,11 @@ function createPlayScene(manager, opts) {
       c.lineTo(boardSide, k * cell);
     }
     c.stroke();
-    // 墙线（区域分界线进一步加粗）
+    // 墙线（区域分界线进一步加粗；圆头圆接——Murdoku 式手绘感，交接处不生硬）
     c.strokeStyle = '#161616';
     c.lineWidth = 5;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
     c.beginPath();
     for (let r = 0; r < n; r++) {
       for (let cc = 0; cc < n; cc++) {
@@ -3797,6 +3799,14 @@ function createPlayScene(manager, opts) {
       if (o.span === 2 && i !== o.cell) return;   // 右半格由锚点格统一处理
       const x = M.col(i, n) * cell, y = M.row(i, n) * cell;
       const tid = board.theme && board.theme.id;
+      // 落地投影（Murdoku 式硬阴影，统一左上光源；席垫等平铺物不投影）
+      if (!o.mat) {
+        const sw = (o.span === 2 ? 2 : 1) * cell;
+        c.fillStyle = 'rgba(30,25,18,0.22)';
+        c.beginPath();
+        c.ellipse(x + sw / 2, y + cell * 0.88, sw * 0.36, cell * 0.09, 0, 0, Math.PI * 2);
+        c.fill();
+      }
       if (o.span === 2) {
         const img2 = data.objectImg(o.key + '-2', tid);
         if (img2 && img2.width) {
