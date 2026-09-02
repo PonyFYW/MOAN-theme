@@ -4529,7 +4529,9 @@ function createPlayScene(manager, opts) {
   function drawWin(ctx, t) {
     ctx.fillStyle = t.dim;
     ctx.fillRect(0, 0, W, H);
-    const card = { x: 28, y: H * 0.20, w: W - 56, h: 330 };
+    // 横屏限宽居中（原全宽过长）；竖屏保持近全宽
+    const cw = LAND ? Math.min(440, W - 56) : W - 56;
+    const card = { x: (W - cw) / 2, y: LAND ? Math.max(24, (H - 330) / 2) : H * 0.20, w: cw, h: 330 };
     ctx.fillStyle = t.card;
     roundRect(ctx, card.x, card.y, card.w, card.h, 14);
     ctx.fill();
