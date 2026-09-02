@@ -3256,15 +3256,15 @@ const HOWTO = `真凶必曾与死者独处一室（同处一屋，且屋内再�
 【铁律】
 · 同行、同列，各仅一人。
 · 诸位只能立于空地（不可立于桌椅器物之上，但可坐在椅凳上）。
-· 💀 死者亦在案发现场某处。
+· 死者亦在案发现场某处。
 【仵作手法】
 · 点按嫌疑人：选中此人的案卷
 · 点按格子：朱笔批注（显示单字简称）
 · 长按格子：将选中之人置于此处
 · 按住拖动：连续批注
-· ✕ 排除：墨笔打叉，标记此处断无可能（PC 端可直接右键格子打/撤叉）
-· ⌫ 擦除：点按清单一格，长按清空全盘
-· ↩ 撤回　💡 提点（推理链逐步揭示）
+· 排除：墨笔打叉，标记此处断无可能（PC 端可直接右键格子打/撤叉）
+· 擦除：点按清单一格，长按清空全盘
+· 撤回　提点（推理链逐步揭示）
 · 专家/大师/传奇档不设提点，全凭推理
 【术语】
 · 屋/房/处所：粗墙围合之区域
@@ -4446,19 +4446,8 @@ function createPlayScene(manager, opts) {
     ctx.fillStyle = t.dim;
     ctx.fillRect(0, 0, W, H);
     const cw2 = LAND ? Math.min(520, W - 48) : W - 48;
-    const card = LAND
-      ? { x: (W - cw2) / 2, y: 24, w: cw2, h: H - 48 }
-      : { x: 24, y: 56, w: cw2, h: H - 128 };
-    zones.howtoCard = card;
-    fillPaper(ctx, card.x, card.y, card.w, card.h, 12, '#f2ecdd');
-    ctx.fillStyle = t.gold;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `17px ${FONTS.kai}`;
-    ctx.fillText('玩法说明', card.x + card.w / 2, card.y + 22);
-    const tx = card.x + 16, ty = card.y + 40;
-    const tw = card.w - 32, th = card.h - 40 - 12;
-    ctx.font = `12px ${FONTS.song}`;
+    const fs = 13, lineH = 17;              // 正文微软雅黑、紧凑行距
+    ctx.font = `${fs}px ${FONTS.song}`;
     let howtoText = data.HOWTO;
     if (board) {
       // 本关器物说明：哪些可坐哪些不可坐（按类型去重）
@@ -4469,8 +4458,22 @@ function createPlayScene(manager, opts) {
       const cant = types.filter(o => !o.sittable).map(o => o.name);
       howtoText += `\n【本关器物】\n· 可坐：${can.join('、') || '无'}\n· 不可坐：${cant.join('、') || '无'}`;
     }
+    const tw = cw2 - 32;
     const lines = [];
     howtoText.split('\n').forEach(raw => wrapText(ctx, raw, tw).forEach(s => lines.push(s)));
+    // 卡片按内容收高（不留空白），垂直居中
+    const headH = 40, padB = 14;
+    const ch = Math.min(H - 48, headH + lines.length * lineH + padB);
+    const card = { x: (W - cw2) / 2, y: Math.max(16, (H - ch) / 2), w: cw2, h: ch };
+    zones.howtoCard = card;
+    fillPaper(ctx, card.x, card.y, card.w, card.h, 12, '#f2ecdd');
+    ctx.fillStyle = t.gold;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold 15px ${FONTS.song}`;
+    ctx.fillText('玩法说明', card.x + card.w / 2, card.y + 22);
+    const tx = card.x + 16, ty = card.y + headH;
+    const th = card.h - headH - padB;
     ctx.save();
     ctx.beginPath();
     ctx.rect(tx - 2, ty, tw + 10, th);
@@ -4479,9 +4482,10 @@ function createPlayScene(manager, opts) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = t.fg;
-    lines.forEach((s, i) => ctx.fillText(s, tx, ty + i * 19));
+    ctx.font = `${fs}px ${FONTS.song}`;
+    lines.forEach((s, i) => ctx.fillText(s, tx, ty + i * lineH));
     ctx.restore();
-    const contentH = lines.length * 19;
+    const contentH = lines.length * lineH;
     howtoScroll.setRange(contentH, th);
     if (contentH > th) {
       const ratio = Math.max(0, Math.min(1, howtoScroll.offset / (contentH - th)));
@@ -4503,7 +4507,9 @@ function createPlayScene(manager, opts) {
   function drawReplay(ctx, t) {
     ctx.fillStyle = t.dim;
     ctx.fillRect(0, 0, W, H);
-    const card = { x: 28, y: H * 0.32, w: W - 56, h: 210 };
+    // 横屏限宽居中（与胜利卡同款）；竖屏保持近全宽
+    const cw = LAND ? Math.min(440, W - 56) : W - 56;
+    const card = { x: (W - cw) / 2, y: LAND ? Math.max(24, (H - 210) / 2) : H * 0.32, w: cw, h: 210 };
     ctx.fillStyle = t.card;
     roundRect(ctx, card.x, card.y, card.w, card.h, 14);
     ctx.fill();
@@ -5321,16 +5327,25 @@ function makeCaseOpts(L, th, diffKey, ci) {
 function renderHowtoModal(ctx, t, W, H, zones, modalScroll) {
   ctx.fillStyle = t.dim;
   ctx.fillRect(0, 0, W, H);
-  const card = { x: 24, y: 56, w: W - 48, h: H - 128 };
+  const cw2 = Math.min(520, W - 48);
+  const fs = 13, lineH = 17;                // 正文微软雅黑、紧凑行距
+  ctx.font = `${fs}px ${FONTS.song}`;
+  const bodyW = cw2 - 40;
+  const lines = wrapText(ctx, HOWTO, bodyW);
+  // 卡片按内容收高（不留空白），垂直居中；底部留「开始破案」按钮区
+  const headH = 42, btnH = 64, padB = 12;
+  const ch = Math.min(H - 48, headH + lines.length * lineH + btnH + padB);
+  const card = { x: (W - cw2) / 2, y: Math.max(16, (H - ch) / 2), w: cw2, h: ch };
   zones.modalCard = card;
   fillPaper(ctx, card.x, card.y, card.w, card.h, 14, '#f2ecdd');
   ctx.fillStyle = t.gold;
   ctx.textAlign = 'center';
-  ctx.font = `19px ${FONTS.kai}`;
-  ctx.fillText('玩法说明', W / 2, card.y + 30);
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 15px ${FONTS.song}`;
+  ctx.fillText('玩法说明', card.x + card.w / 2, card.y + 22);
 
-  const bodyX = card.x + 20, bodyY = card.y + 52;
-  const bodyW = card.w - 40, bodyH = card.h - 52 - 66;
+  const bodyX = card.x + 20, bodyY = card.y + headH;
+  const bodyH = card.h - headH - btnH - padB;
   ctx.save();
   ctx.beginPath();
   ctx.rect(bodyX, bodyY, bodyW, bodyH);
@@ -5338,19 +5353,14 @@ function renderHowtoModal(ctx, t, W, H, zones, modalScroll) {
   ctx.translate(0, -modalScroll.offset);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = `13px ${FONTS.song}`;
+  ctx.font = `${fs}px ${FONTS.song}`;
   ctx.fillStyle = '#2a2620';
-  const lines = wrapText(ctx, HOWTO, bodyW);
-  let ly = bodyY;
-  lines.forEach(line => {
-    ctx.fillText(line, bodyX, ly);
-    ly += 21;
-  });
-  modalScroll.setRange(lines.length * 21, bodyH);
+  lines.forEach((line, i) => ctx.fillText(line, bodyX, bodyY + i * lineH));
+  modalScroll.setRange(lines.length * lineH, bodyH);
   ctx.restore();
   ctx.textBaseline = 'middle';
 
-  zones.modalClose = { x: card.x + 20, y: card.y + card.h - 54, w: card.w - 40, h: 42 };
+  zones.modalClose = { x: card.x + 20, y: card.y + card.h - 56, w: card.w - 40, h: 42 };
   drawButton(ctx, t, zones.modalClose, '开始破案');
 }
 
