@@ -3194,6 +3194,7 @@ function loadPortraits(onAny) {
   });
   // UI 贴图
   _loadOne(uiImgs, 'sealUnlock', 'assets/ui/seal-unlock.png', onAny);
+  _loadOne(uiImgs, 'sealBroken', 'assets/ui/seal-broken.png', onAny);   // 「已破」镂空朱文印
 }
 
 /* 主题专属头像映射：themeId → { dir: 资产目录, map: { 全局 imgKey → 主题文件名 } } */
@@ -3241,6 +3242,11 @@ function lockSeal() {
   return uiImgs.sealUnlock || null;
 }
 
+/* 「已破」镂空朱文印（assets/ui/seal-broken.png；未加载完成返回 null，调用方回退描边字） */
+function brokenSeal() {
+  return uiImgs.sealBroken || null;
+}
+
 /* 图片加载版本号（每次到位 +1）：渲染层据此重建离屏缓存 */
 function imageVersion() {
   return imgVersion;
@@ -3275,7 +3281,7 @@ const HOWTO = `真凶必曾与死者独处一室（同处一屋，且屋内再�
 module.exports = {
   L, CASE_NAMES, DAILY_DIFFS, CASES_PER_DIFF, FLOOR_COLORS, HOWTO,
   dailyKey, caseSeed, caseName, caseNameAt, getBoard, caseCount, hasDiff, themeLadders, themeSpec,
-  loadPortraits, portrait, cut, objectImg, floorImg, imageVersion, lockSeal
+  loadPortraits, portrait, cut, objectImg, floorImg, imageVersion, lockSeal, brokenSeal
 };
 
 });
@@ -3931,10 +3937,10 @@ function createPlayScene(manager, opts) {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         noted.slice(0, 6).forEach((p, k) => {
-          // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）；v3.1 字号放大（简称标注易读）
+          // 粗体 + 黑色描边（参考 murdoku 的格子字母样式）；与区域框线留出间隙
           const fs = Math.max(12, cell * 0.20);   // T5 徽章级：批注按格等比，不再压场
-          const tx = x + 2 + (k % 3) * cell * 0.32;
-          const ty = y + 2 + Math.floor(k / 3) * cell * 0.3;
+          const tx = x + 5 + (k % 3) * cell * 0.32;
+          const ty = y + 8 + Math.floor(k / 3) * cell * 0.3;
           ctx.font = `bold ${fs}px sans-serif`;
           ctx.lineJoin = 'round';
           ctx.lineWidth = Math.max(2, fs * 0.22);
@@ -5627,8 +5633,8 @@ function createThemeScene(manager) {
         ctx.font = `bold 14px ${FONTS.kai}`;
         ctx.textAlign = 'right';
         ctx.fillText(expanded ? '收起 ▲' : '展开 ▼', rect.x + rect.w - 14, rect.y + 18);
-        ctx.fillStyle = doneCount ? t.ok : t.muted;
-        ctx.font = `13px ${FONTS.song}`;
+        ctx.fillStyle = doneCount ? '#b13a30' : t.muted;   // 已破计数：朱砂楷体（与印章同系，弃草绿）
+        ctx.font = `bold 13px ${FONTS.kai}`;
         const cntW = ctx.measureText(expanded ? '收起 ▲' : '展开 ▼').width + 12;
         ctx.fillText(`已破 ${doneCount}/${th.cases.length}`, rect.x + rect.w - 14 - cntW - 56, rect.y + 18);
         // 摘要单行（前三件器物 + 计数）
@@ -5775,10 +5781,21 @@ function createThemeScene(manager) {
         ctx.fill();
         drawLockSeal(ctx, x + cw / 2, y0 + thumbH / 2, 88, '未解锁');
       } else if (done) {
-        ctx.fillStyle = 'rgba(62,142,78,0.9)';
-        ctx.font = `bold 12px ${FONTS.kai}`;
-        ctx.textAlign = 'right';
-        ctx.fillText('已破', x + cw - 8, y0 + 12);
+        // 已破：镂空朱文印（assets/ui/seal-broken.png；未加载回退朱砂描边字）
+        const seal = data.brokenSeal();
+        if (seal) {
+          const S = 44;
+          ctx.drawImage(seal, x + cw - S - 6, y0 + 4, S, S);
+        } else {
+          ctx.font = `bold 13px ${FONTS.kai}`;
+          ctx.textAlign = 'right';
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(242,236,221,0.9)';
+          ctx.strokeText('已破', x + cw - 8, y0 + 12);
+          ctx.fillStyle = '#b13a30';
+          ctx.fillText('已破', x + cw - 8, y0 + 12);
+        }
       } else if (prog && prog.placed && Object.keys(prog.placed).length) {
         // 进行中：描边加粗放大（小字在复杂底图上没有存在感）
         ctx.font = `bold 15px ${FONTS.kai}`;
