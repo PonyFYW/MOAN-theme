@@ -3050,7 +3050,7 @@ function themeLadders() {
       if (!m) return;
       const b = LIB.themes[seed];
       const th = out.find(x => x.id === m[1]);
-      if (th && b) th.cases.push({ seed, diff: SIZE_DIFF[b.size] || 'medium', i: b.size, size: b.size });
+      if (th && b) th.cases.push({ seed, diff: SIZE_DIFF[b.size] || 'medium', i: b.size, size: b.size, name: b.caseName || null });
     });
     out.forEach(th => th.cases.sort((a, b) => a.size - b.size || a.seed.localeCompare(b.seed)));
     // 同尺寸追加案的案名错开（i 参与 caseNameAt 哈希：+8 换名并触发「其二」后缀）
@@ -5343,7 +5343,7 @@ function makeCaseOpts(L, th, diffKey, ci) {
   return {
     seed: c.seed,
     diff: diffKey,
-    title: `「${th.caseName}」· ${bandOf(c.size)} · ${c.size}×${c.size}`,
+    title: `「${c.name || th.caseName}」· ${bandOf(c.size)} · ${c.size}×${c.size}`,
     next
   };
 }
@@ -5805,7 +5805,7 @@ function createThemeScene(manager) {
       ctx.textBaseline = 'middle';
       ctx.fillStyle = unlocked ? '#2a2620' : '#8a8578';
       ctx.font = `bold 13px ${FONTS.kai}`;
-      ctx.fillText(`「${data.caseNameAt(c.diff, c.i)}」`, x + cw / 2, y0 + thumbH + 18);
+      ctx.fillText(`「${c.name || data.caseNameAt(c.diff, c.i)}」`, x + cw / 2, y0 + thumbH + 18);
       ctx.fillStyle = unlocked ? t.muted : '#a39b7e';
       ctx.font = `11px ${FONTS.song}`;
       ctx.fillText(`${bandOf(c.size)} · ${c.size}×${c.size}`, x + cw / 2, y0 + thumbH + 36);
