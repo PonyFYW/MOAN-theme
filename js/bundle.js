@@ -4912,15 +4912,9 @@ function createPlayScene(manager, opts) {
       const i = cellAt(x, y);
       if (i >= 0) {
         if (holdFired) return; // 长按放置后的抬起，不再触发点按
-        // 不可坐物件格：仅展示物件名（本就不可站/坐，无法标记）。
-        // 可坐物件格与普通格同等待遇（对齐 Web 版）：批注/排除/擦除照常，已放置则点按拿起。
-        if (objAt[i] && !board.occupiable[i]) {
-          toast(objAt[i].name);
-          manager.invalidate();
-          return;
-        }
-        // 可坐物件格：单击也报器物名（不拦截批注/拿起等操作）
-        if (objAt[i]) toast(objAt[i].name);
+        // 不可坐物件格：本就不可站/坐，无法标记，直接拦截（物件名已由悬浮名签展示，点击不再 toast）。
+        // 可坐物件格与普通格同等待遇：批注/排除/擦除照常，已放置则点按拿起。
+        if (objAt[i] && !board.occupiable[i]) return;
         if (tool === 'note') {
           if (placed[i] !== undefined) unplace(i);
           else toggleMark(i, 'note');
