@@ -4146,11 +4146,6 @@ function createPlayScene(manager, opts) {
     const img = data.cut(p, board && board.theme && board.theme.id);
     const tw = cell * 0.7, th = cell * 0.7;
     const tx = x + (cell - tw) / 2, ty = y + (cell - th) / 2;
-    // 落地投影（与物件同款硬阴影，统一左上光源：人像"站"在地板上，不再像贴纸）
-    ctx.fillStyle = 'rgba(30,25,18,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(x + cell / 2, y + cell * 0.86, cell * 0.26, cell * 0.075, 0, 0, Math.PI * 2);
-    ctx.fill();
     if (img) {
       ctx.drawImage(img, tx, ty, tw, th);
     } else {
