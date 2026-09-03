@@ -4274,6 +4274,8 @@ function createPlayScene(manager, opts) {
         const p = cd.p;
         const x = PADX + ci * (cardW + GAP);
         const isPlaced = Object.values(placed).includes(p.id);
+        ctx.save();
+        if (p.id === hoverPerson) ctx.translate(0, -2);   // PC 悬浮：整卡轻微上浮（配合描金高亮）
         // —— 人物纯色卡（色即身份；已放置仅色卡与头像压暗，姓名/性别/简称保持全亮） ——
         ctx.save();
         if (isPlaced) ctx.globalAlpha = 0.38;
@@ -4349,6 +4351,7 @@ function createPlayScene(manager, opts) {
           ly += lineH;
         });
         zones.clueCards.push({ x, y, w: cardW, h: rowH, p: p.id });
+        ctx.restore();   // 对应悬浮 translate（命中区保持逻辑坐标不动）
       });
       y += rowH + GAP;
     }
