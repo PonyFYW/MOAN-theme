@@ -1336,8 +1336,11 @@ __def("src/logic/generator.js", function (require, module, exports) {
     // 方位仅单轴 N/S（nsOnly）、同屋系降权、纯传播验收（depthTarget=0 由构建器注入）
     veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 1.1, rowColCap: 1,
       poolW: { with: 0.25, notWith: 0.25, aloneWith: 0.25, withGender: 0.25, exactRow: 0, exactCol: 0, sameDiag: 0, dir: 0.3, nsOnly: true } },
-    easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 2.0,
-      poolW: { with: 0.6, exactRow: 0.3, exactCol: 0.3, sameDiag: 0.08, dir: 0.4 } },
+    // 简单（对齐 murdoku easy 档，见 murdoku_简单关卡_逐关分析.md）：
+    // 行列每关≤1（rcW 1.1+cap）、对角线封禁（官方16关仅1条）、方位仅N/S；
+    // 保留精确位移与链式/独处/性别条件（easy 灵魂：先落定一人、下一条线索才生效）
+    easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 1,
+      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
     medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.5,
       poolW: { exactRow: 0.4, exactCol: 0.4, sameDiag: 0.1, dir: 0.5 } },
     hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.2,
