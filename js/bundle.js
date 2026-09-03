@@ -1331,8 +1331,11 @@ __def("src/logic/generator.js", function (require, module, exports) {
   ];
 
   const DIFFICULTY = {
-    veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 2.5,
-      poolW: { with: 0.5, notWith: 0.5, aloneWith: 0.5, withGender: 0.5, exactRow: 0.25, exactCol: 0.25, sameDiag: 0.05, dir: 0.3 } },
+    // 非常简单（对齐 murdoku 官方档，见 生成器优化方案.md）：
+    // 锚点以区域/物件/唯一性为主——行列降级（rcW 1.1 + 全关≤1条）、禁斜线/人物精确位移、
+    // 方位仅单轴 N/S（nsOnly）、同屋系降权、纯传播验收（depthTarget=0 由构建器注入）
+    veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 1.1, rowColCap: 1,
+      poolW: { with: 0.25, notWith: 0.25, aloneWith: 0.25, withGender: 0.25, exactRow: 0, exactCol: 0, sameDiag: 0, dir: 0.3, nsOnly: true } },
     easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 2.0,
       poolW: { with: 0.6, exactRow: 0.3, exactCol: 0.3, sameDiag: 0.08, dir: 0.4 } },
     medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.5,
@@ -1452,7 +1455,12 @@ __def("src/logic/generator.js", function (require, module, exports) {
     board.objects.forEach(o => { (byKey[o.key] = byKey[o.key] || []).push(o); });
 
     // poolW：难度级类型阻尼（低难度压关系型、留强锚点，保纯逻辑直落）
-    const push = (clue, weight) => pool.push({ clue, weight: weight * ((poolW && poolW[clue.type]) || 1) });
+    // 注意必须 !== undefined 判定：阻尼显式设 0 = 封禁该类型（'|| 1' 会把 0 当未配置漏过）
+    const push = (clue, weight) => {
+      const damp = (poolW && poolW[clue.type] !== undefined) ? poolW[clue.type] : 1;
+      if (damp <= 0) return;
+      pool.push({ clue, weight: weight * damp });
+    };
 
     for (let p = 0; p < people; p++) {
       const cell = solution[p];
@@ -1559,11 +1567,15 @@ __def("src/logic/generator.js", function (require, module, exports) {
         if (dr === 1) push({ type: 'exactRow', p, ref: { kind: 'person', id: q }, side: 1 }, 0.7);
         if (dr === -1) push({ type: 'exactRow', p, ref: { kind: 'person', id: q }, side: -1 }, 0.7);
 
-        // 8 方位（压低权重，避免方位线索泛滥；另有全关硬上限 1 条，见 HARD_ONCE）
-        for (const dir of ['NW', 'NE', 'SW', 'SE']) {
-          if (M.dirOK(pc, qc, dir, n)) { push({ type: 'dir', p, ref: { kind: 'person', id: q }, dir }, 0.22); break; }
+        // 方位（压低权重，避免方位线索泛滥；另有全关硬上限 1 条，见 HARD_ONCE）
+        // poolW.nsOnly（非常简单档）：仅单轴 N/S，斜向与 E/W 留给 medium+（对齐 murdoku）
+        const nsOnly = !!(poolW && poolW.nsOnly);
+        if (!nsOnly) {
+          for (const dir of ['NW', 'NE', 'SW', 'SE']) {
+            if (M.dirOK(pc, qc, dir, n)) { push({ type: 'dir', p, ref: { kind: 'person', id: q }, dir }, 0.22); break; }
+          }
         }
-        for (const dir of ['N', 'S', 'E', 'W']) {
+        for (const dir of (nsOnly ? ['N', 'S'] : ['N', 'S', 'E', 'W'])) {
           if (M.dirOK(pc, qc, dir, n)) { push({ type: 'dir', p, ref: { kind: 'person', id: q }, dir }, 0.16); }
         }
 
@@ -3031,16 +3043,22 @@ function themeSpec(id) { return L.Generator.THEMES.find(t => t.id === id) || nul
 function themeLadders() {
   if (laddersCache) return laddersCache;
   if (LIB.themes) {
-    // 矩阵库：theme2:<id>:<size> → 每主题按尺寸升序各一案（theme2 = 线索体系 v3 前缀）
+    // 矩阵库：theme2:<id>:<size>[后缀] → 每主题按尺寸升序（同尺寸可有多案：5、5b…；theme2 = 线索体系 v3 前缀）
     const out = L.Generator.THEMES.map(t => ({ id: t.id, name: t.name, caseName: t.caseName, cases: [] }));
     Object.keys(LIB.themes).forEach(seed => {
-      const m = seed.match(/^theme2:(\w+):(\d+)$/);
+      const m = seed.match(/^theme2:(\w+):(\d+)[a-z]?$/);
       if (!m) return;
       const b = LIB.themes[seed];
       const th = out.find(x => x.id === m[1]);
       if (th && b) th.cases.push({ seed, diff: SIZE_DIFF[b.size] || 'medium', i: b.size, size: b.size });
     });
-    out.forEach(th => th.cases.sort((a, b) => a.size - b.size));
+    out.forEach(th => th.cases.sort((a, b) => a.size - b.size || a.seed.localeCompare(b.seed)));
+    // 同尺寸追加案的案名错开（i 参与 caseNameAt 哈希：+8 换名并触发「其二」后缀）
+    out.forEach(th => {
+      for (let k = 1; k < th.cases.length; k++) {
+        if (th.cases[k].size === th.cases[k - 1].size) th.cases[k] = Object.assign({}, th.cases[k], { i: th.cases[k - 1].i + 8 });
+      }
+    });
     laddersCache = out.filter(th => th.cases.length);
     return laddersCache;
   }
