@@ -280,6 +280,21 @@ __def("src/logic/clues.js", function (require, module, exports) {
         });
         return hasM && hasF;
       }
+      // P1 唯一性锚（「P 是唯一满足 X 的人」→ P 满足，其余人一律不满足）
+      case 'onlySit': {
+        const sit = c => !!board.sittable[c] && !(board.mat && board.mat[c]);
+        if (!sit(P)) return false;
+        return board.people.every(q => q.id === clue.p || !sit(pos[q.id]));
+      }
+      case 'onlyOn': {
+        const objs = objByKey(board, clue.objKey);
+        if (!objs.some(o => o.cell === P)) return false;
+        return board.people.every(q => q.id === clue.p || !objs.some(o => o.cell === pos[q.id]));
+      }
+      case 'onlyRoom': {
+        if (board.roomAt[P] !== clue.room) return false;
+        return board.people.every(q => q.id === clue.p || board.roomAt[pos[q.id]] !== clue.room);
+      }
       case 'victimFree': return true;
     }
     return false;
@@ -334,6 +349,9 @@ __def("src/logic/clues.js", function (require, module, exports) {
       case 'aloneWithGender': return `仅与一位<b>${GENDER_ZH[clue.gender]}</b>同屋。`;
       case 'roomMixGender':
         return `${board.rooms[clue.room].name}内有一<b>男</b>一<b>女</b>。`;
+      case 'onlySit': return `是唯一坐着的人。`;
+      case 'onlyOn': return `是唯一在<b>${objName(board, clue.objKey)}</b>上的人。`;
+      case 'onlyRoom': return `是唯一在${board.rooms[clue.room].name}的人。`;
       case 'victimFree': return `与真凶独处者，便是死者。`;
     }
     return '';
@@ -357,11 +375,12 @@ __def("src/logic/clues.js", function (require, module, exports) {
         return refsObject ? 'object' : 'dir';
       case 'sitObj': case 'besideAnyOf': case 'sameRowObj': case 'sameColObj':
       case 'otherBeside': case 'onMat': case 'notMat':
+      case 'onlySit': case 'onlyOn':
         return 'object';
       case 'room': case 'notRoom': case 'with': case 'notWith':
       case 'aloneWith': case 'alone': case 'corner': case 'notCorner':
       case 'withGender': case 'aloneWithGender':
-      case 'emptyRoom': case 'roomMixGender':
+      case 'emptyRoom': case 'roomMixGender': case 'onlyRoom':
         return 'room';
       default: return 'other';
     }
@@ -379,7 +398,8 @@ __def("src/logic/clues.js", function (require, module, exports) {
   /** 一元线索（在求解器初始化时直接裁剪域）。bandRow/bandCol 为 legacy（旧库残留，新生成不再产出） */
   const UNARY_TYPES = new Set([
     'row', 'col', 'room', 'notRoom', 'corner', 'notCorner', 'emptyRoom',
-    'sameRowObj', 'sameColObj', 'sitObj', 'onMat', 'notMat', 'besideAnyOf', 'bandRow', 'bandCol'
+    'sameRowObj', 'sameColObj', 'sitObj', 'onMat', 'notMat', 'besideAnyOf', 'bandRow', 'bandCol',
+    'onlySit', 'onlyOn', 'onlyRoom'
   ]);
 
   function isUnary(clue) {
@@ -483,6 +503,23 @@ __def("src/logic/solver.js", function (require, module, exports) {
           const objs = C.objByKey(board, clue.objKey);
           apply(p, c => objs.some(o => c !== o.cell &&
             Math.abs(M.row(c, n) - M.row(o.cell, n)) === Math.abs(M.col(c, n) - M.col(o.cell, n))));
+          break;
+        }
+        case 'onlySit': {
+          const sit = c => !!board.sittable[c] && !(board.mat && board.mat[c]);
+          apply(p, c => sit(c));
+          for (let q = 0; q < domains.length; q++) if (q !== p) apply(q, c => !sit(c));
+          break;
+        }
+        case 'onlyOn': {
+          const objs = C.objByKey(board, clue.objKey);
+          apply(p, c => objs.some(o => o.cell === c));
+          for (let q = 0; q < domains.length; q++) if (q !== p) apply(q, c => !objs.some(o => o.cell === c));
+          break;
+        }
+        case 'onlyRoom': {
+          apply(p, c => board.roomAt[c] === clue.room);
+          for (let q = 0; q < domains.length; q++) if (q !== p) apply(q, c => board.roomAt[c] !== clue.room);
           break;
         }
       }
@@ -1335,22 +1372,22 @@ __def("src/logic/generator.js", function (require, module, exports) {
     // 锚点以区域/物件/唯一性为主——行列降级（rcW 1.1 + 全关≤1条）、禁斜线/人物精确位移、
     // 方位仅单轴 N/S（nsOnly）、同屋系降权、纯传播验收（depthTarget=0 由构建器注入）
     veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 1.1, rowColCap: 1,
-      poolW: { with: 0.25, notWith: 0.25, aloneWith: 0.25, withGender: 0.25, exactRow: 0, exactCol: 0, sameDiag: 0, dir: 0.3, nsOnly: true } },
+      poolW: { with: 0.25, notWith: 0.25, aloneWith: 0.25, withGender: 0.25, exactRow: 0, exactCol: 0, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.2, onlyOn: 1.2, onlyRoom: 0.9 } },
     // 简单（对齐 murdoku easy 档，见 murdoku_简单关卡_逐关分析.md）：
     // 行列每关≤1（rcW 1.1+cap）、对角线封禁（官方16关仅1条）、方位仅N/S；
     // 保留精确位移与链式/独处/性别条件（easy 灵魂：先落定一人、下一条线索才生效）
     easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 1,
-      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
+      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 简单·7×7（simple：murdoku 简单档主流盘之一；UI bandOf(7) 本就显示「简单」。
     // 参数同 easy，密度随盘微调；主题矩阵 SIZE_DIFF[7] 映射到此档。
-    // rowColCap 暂为 2：only 唯一性锚（P1）未落地前的过渡值，P1 落地后收回 1）
-    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 2,
-      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
+    // rowColCap 已收回 1：唯一性锚（P1）落地，不再靠直给行列兜底）
+    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 1,
+      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
     // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
     // 独处/性别系升主力（官方12/15关在用）、保留精确位移、方位仅N/S
     medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.1, rowColCap: 1,
-      poolW: { with: 0.7, notWith: 0.5, aloneWith: 0.7, withGender: 0.5, alone: 0.7, exactRow: 0.4, exactCol: 0.4, sameDiag: 0, dir: 0.4, nsOnly: true } },
+      poolW: { with: 0.7, notWith: 0.5, aloneWith: 0.7, withGender: 0.5, alone: 0.7, exactRow: 0.4, exactCol: 0.4, sameDiag: 0, dir: 0.4, nsOnly: true, onlySit: 1.0, onlyOn: 1.0, onlyRoom: 0.8 } },
     // 困难（对齐 murdoku 困难档）：sameDiag 全禁（0/17）、行列≤1、独处系主力（16/17）、
     // 位移/否定是难度组成（长位移 k>1 待实现，见分析文档）
     hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.1, rowColCap: 1,
@@ -1683,6 +1720,31 @@ __def("src/logic/generator.js", function (require, module, exports) {
         if (hasM && hasF) push({ type: 'roomMixGender', room: r.id }, 0.5);
       }
     });
+
+    // ===== P1 唯一性锚（见 生成器优化方案 P1）=====
+    // 语义：「P 是唯一满足 X 的人」→ P 满足，其余人一律不满足。强锚，顶替一部分直给行列职责。
+    // 唯一坐着：仅当恰一人坐时成立（坐具数量随盘而定，veryEasy 1 把天然成立；大盘 2~3 把坐满则不出）
+    let sitterCount = 0, sitter = -1;
+    for (let p = 0; p < people; p++) {
+      const c = solution[p];
+      if (board.sittable[c] && !(board.mat && board.mat[c])) { sitterCount++; sitter = p; }
+    }
+    if (sitterCount === 1) push({ type: 'onlySit', p: sitter }, 1.2);
+    // 唯一在【某型可站/可坐物件】上：恰一人落于该型（须 ≥2 实例，否则「唯一」退化为直接报答案）
+    Object.keys(byKey).forEach(k => {
+      const inst = byKey[k];
+      if (!inst.some(o => o.mat || o.sittable)) return;
+      if (inst.length < 2) return;
+      const onPeople = [];
+      for (let p = 0; p < people; p++) {
+        if (inst.some(o => o.cell === solution[p])) onPeople.push(p);
+      }
+      if (onPeople.length === 1) push({ type: 'onlyOn', p: onPeople[0], objKey: k }, 1.2);
+    });
+    // 唯一在【某房】的人（独处房命名版：比 alone 多钉一个房名，中等档签名锚）
+    for (let p = 0; p < people; p++) {
+      if (counts[board.roomAt[solution[p]]] === 1) push({ type: 'onlyRoom', p, room: board.roomAt[solution[p]] }, 1.0);
+    }
 
     return pool;
   }
@@ -3823,6 +3885,9 @@ function createPlayScene(manager, opts) {
   let cacheVer = -1;
 
   /* 静态层（局部坐标 0..boardSide） */
+  /* 已自带投影的物件 key（重生成新图带形态投影的，跳过代码统一椭圆影；全量焕新后撤除代码投影） */
+  const SHADOW_FREE = new Set(['chair']);
+
   function drawBoardStatic(c) {
     for (let i = 0; i < n * n; i++) {
       const r = M.row(i, n), cc = M.col(i, n);
@@ -3885,7 +3950,8 @@ function createPlayScene(manager, opts) {
       const x = M.col(i, n) * cell, y = M.row(i, n) * cell;
       const tid = board.theme && board.theme.id;
       // 落地投影（Murdoku 式硬阴影，统一左上光源；席垫等平铺物不投影）
-      if (!o.mat) {
+      // SHADOW_FREE：图已自带投影的物件跳过代码投影（重生成物件逐步迁入；全量到位后撤代码投影）
+      if (!o.mat && !SHADOW_FREE.has(o.key)) {
         const sw = (o.span === 2 ? 2 : 1) * cell;
         c.fillStyle = 'rgba(30,25,18,0.22)';
         c.beginPath();
