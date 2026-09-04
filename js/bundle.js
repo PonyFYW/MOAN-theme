@@ -1380,8 +1380,9 @@ __def("src/logic/generator.js", function (require, module, exports) {
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 简单·7×7（simple：murdoku 简单档主流盘之一；UI bandOf(7) 本就显示「简单」。
     // 参数同 easy，密度随盘微调；主题矩阵 SIZE_DIFF[7] 映射到此档。
-    // rowColCap 已收回 1：唯一性锚（P1）落地，不再靠直给行列兜底）
-    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 1,
+    // rowColCap 暂保持 2：唯一性锚（P1）已落地但生成率仍低（onlySit 需空椅补丁、onlyOn/onlyRoom
+    // 约 1~2/局），锚点强度尚不足以完全顶替直给行列；待空椅落地提升锚点密度后再收回 1）
+    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
     // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
@@ -1811,6 +1812,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
       const sittable = new Array(size * size).fill(false);
       const mat = new Array(size * size).fill(false);
       const objects = [];
+      const occSitCells = new Set();   // 有人椅格（席垫避开，避免「坐」被「在席上」顶掉）
 
       if (theme.roomObjects) {
         // 区域定向摆放（主题带 roomObjects 表时）：每区 1-2 件，硬件放本屋空格、可坐件放本屋有人格
@@ -1880,14 +1882,28 @@ __def("src/logic/generator.js", function (require, module, exports) {
         occupiable[cell] = false;
       });
 
-      // 2-3 个可坐物件落在有人格子上（“坐在椅子上”线索的锚点）
+      // 可坐物件：size<8 用「1 把有人椅 + 空椅」让「唯一坐着」(P1 onlySit) 可成立；
+      // 全用同一坐具类型（sitObj/onlyOn 需 ≥2 实例）。size≥8 维持「sitCellCount 把有人椅」作
+      // 「坐在椅子上」锚点（困难/专家档的独特性另有机制，见 生成器优化方案 §十/§十一）。
       const sitTypes = OBJECT_TYPES.filter(t => t.sittable && !t.mat);
-      const sitCellCount = Math.min(size >= 8 ? 3 : size >= 6 ? 2 : 1, size);
-      rng.shuffle(Array.from(occupied)).slice(0, sitCellCount).forEach(cell => {
-        const t = rng.pick(sitTypes);
-        objects.push({ id: objects.length, cell, key: t.key, name: t.name, sittable: true });
-        sittable[cell] = true;
-      });
+      if (size < 8) {
+        const sitType = rng.pick(sitTypes);
+        const emptySits = size >= 6 ? 2 : 1;                        // 空椅数
+        const freeSittable = freeCells.filter(c => occupiable[c]);  // 可站空格（避开硬物件）
+        const occCell = rng.shuffle(Array.from(occupied)).slice(0, 1);  // 1 把有人椅
+        occSitCells.add(occCell[0]);
+        rng.shuffle(freeSittable).slice(0, emptySits).concat(occCell).forEach(cell => {
+          objects.push({ id: objects.length, cell, key: sitType.key, name: sitType.name, sittable: true });
+          sittable[cell] = true;
+        });
+      } else {
+        const sitCellCount = Math.min(size >= 8 ? 3 : 2, size);
+        rng.shuffle(Array.from(occupied)).slice(0, sitCellCount).forEach(cell => {
+          const t = rng.pick(sitTypes);
+          objects.push({ id: objects.length, cell, key: t.key, name: t.name, sittable: true });
+          sittable[cell] = true;
+        });
+      }
       }   // theme.roomObjects 分支结束
 
       // 席垫：成块铺设的地板物件（「在/不在 X 上」线索锚点，对标 Murdoku 地毯）。
@@ -1925,7 +1941,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
         };
         const zoneRooms = rooms.filter(inZone).map(r => r.id);
         // 有人格参与判定占位（席垫只压“可站”格：有人格或 occupiable 空格）
-        const standPool = c => occupied.has(c) || (occupiable[c] && !taken.has(c));
+        const standPool = c => !occSitCells.has(c) && (occupied.has(c) || (occupiable[c] && !taken.has(c)));
         const allCells = Array.from({ length: size * size }, (_, i) => i).filter(standPool);
         const placedMat = [];
         // 选一条串：先看限定室内外，放宽到任意房间；且不与已铺席垫相邻（防两块跨墙连成一片）
