@@ -2014,18 +2014,21 @@ __def("src/logic/generator.js", function (require, module, exports) {
       // 板级规则（非线索卡）：参与求解器约束与最终校验；中等档签名机制
       // （murdoku surprise-visitors「只能有一人在地毯上」）。
       const rules = [];
-      const onKeyCount = {};
-      const seenKeys = new Set();
-      board.objects.forEach(o => {
-        if (!(o.mat || o.sittable) || seenKeys.has(o.key)) return;
-        seenKeys.add(o.key);
-        const inst = board.objects.filter(o2 => o2.key === o.key);
-        onKeyCount[o.key] = inst.reduce((acc, o2) => acc + (occupied.has(o2.cell) ? 1 : 0), 0);
-      });
-      const oneKeys = Object.keys(onKeyCount).filter(k => onKeyCount[k] === 1);
-      if (oneKeys.length) {
-        const matKey = oneKeys.find(k => board.objects.some(o => o.key === k && o.mat));
-        rules.push({ type: 'exactlyOneOnX', objKey: matKey || oneKeys[0] });
+      // 仅中等档及以上（size≥7）且 ~1/3 概率启用（对齐 murdoku 中等 5/15 关）
+      if (size >= 7 && rng.chance(0.35)) {
+        const onKeyCount = {};
+        const seenKeys = new Set();
+        board.objects.forEach(o => {
+          if (!(o.mat || o.sittable) || seenKeys.has(o.key)) return;
+          seenKeys.add(o.key);
+          const inst = board.objects.filter(o2 => o2.key === o.key);
+          onKeyCount[o.key] = inst.reduce((acc, o2) => acc + (occupied.has(o2.cell) ? 1 : 0), 0);
+        });
+        const oneKeys = Object.keys(onKeyCount).filter(k => onKeyCount[k] === 1);
+        if (oneKeys.length) {
+          const matKey = oneKeys.find(k => board.objects.some(o => o.key === k && o.mat));
+          rules.push({ type: 'exactlyOneOnX', objKey: matKey || oneKeys[0] });
+        }
       }
       board.rules = rules;
 
@@ -3947,9 +3950,6 @@ function createPlayScene(manager, opts) {
   let cacheVer = -1;
 
   /* 静态层（局部坐标 0..boardSide） */
-  /* 已自带投影的物件 key（重生成新图带形态投影的，跳过代码统一椭圆影；全量焕新后撤除代码投影） */
-  const SHADOW_FREE = new Set(['chair']);
-
   function drawBoardStatic(c) {
     for (let i = 0; i < n * n; i++) {
       const r = M.row(i, n), cc = M.col(i, n);
@@ -4012,8 +4012,7 @@ function createPlayScene(manager, opts) {
       const x = M.col(i, n) * cell, y = M.row(i, n) * cell;
       const tid = board.theme && board.theme.id;
       // 落地投影（Murdoku 式硬阴影，统一左上光源；席垫等平铺物不投影）
-      // SHADOW_FREE：图已自带投影的物件跳过代码投影（重生成物件逐步迁入；全量到位后撤代码投影）
-      if (!o.mat && !SHADOW_FREE.has(o.key)) {
+      if (!o.mat) {
         const sw = (o.span === 2 ? 2 : 1) * cell;
         c.fillStyle = 'rgba(30,25,18,0.22)';
         c.beginPath();
