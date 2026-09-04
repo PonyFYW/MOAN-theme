@@ -409,7 +409,30 @@ __def("src/logic/clues.js", function (require, module, exports) {
         !!clue.objKey);
   }
 
-  global.MurdokuClues = { checkClue, clueText, cluePeople, isUnary, categoryOf, genderCands, objByKey, objName, DIR_ZH, GENDER_ZH };
+  /** 板级全局规则校验（P2 全局规则一期）。pos: person -> cell（全部 >= 0）。 */
+  function checkRule(rule, pos, board) {
+    switch (rule.type) {
+      case 'exactlyOneOnX': {
+        const objs = objByKey(board, rule.objKey);
+        let on = 0;
+        for (let q = 0; q < board.people.length; q++) {
+          if (objs.some(o => o.cell === pos[q])) on++;
+        }
+        return on === 1;
+      }
+    }
+    return true;
+  }
+
+  /** 板级全局规则文案（古风白话） */
+  function ruleText(rule, board) {
+    switch (rule.type) {
+      case 'exactlyOneOnX': return `全场恰有一人在<b>${objName(board, rule.objKey)}</b>上。`;
+    }
+    return '';
+  }
+
+  global.MurdokuClues = { checkClue, clueText, cluePeople, isUnary, categoryOf, genderCands, objByKey, objName, checkRule, ruleText, DIR_ZH, GENDER_ZH };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 });
@@ -817,6 +840,10 @@ __def("src/logic/solver.js", function (require, module, exports) {
     function leafOK(pos) {
       for (const clue of clues) {
         if (!C.checkClue(clue, pos, board)) return false;
+      }
+      // 板级全局规则（P2）：与线索同属约束，缺失即非法解
+      for (const rule of (board.rules || [])) {
+        if (!C.checkRule(rule, pos, board)) return false;
       }
       // 凶手规则：被害者须与恰好一人独处一室。
       // 这是玩家可见的公开规则（非被害者的位置提示），缺失它时被害者摆位
@@ -1380,9 +1407,8 @@ __def("src/logic/generator.js", function (require, module, exports) {
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 简单·7×7（simple：murdoku 简单档主流盘之一；UI bandOf(7) 本就显示「简单」。
     // 参数同 easy，密度随盘微调；主题矩阵 SIZE_DIFF[7] 映射到此档。
-    // rowColCap 暂保持 2：唯一性锚（P1）已落地但生成率仍低（onlySit 需空椅补丁、onlyOn/onlyRoom
-    // 约 1~2/局），锚点强度尚不足以完全顶替直给行列；待空椅落地提升锚点密度后再收回 1）
-    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 2,
+    // rowColCap 收回 1：唯一性锚（P1）+ 空椅补丁落地后 onlyOn/onlyRoom 锚点密度足够，不再靠直给行列兜底）
+    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 1,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
     // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
@@ -1984,6 +2010,25 @@ __def("src/logic/generator.js", function (require, module, exports) {
       board.murdererId = M.findMurderer(solution, board);
       if (board.murdererId < 0) continue;
 
+      // ===== P2 全局规则一期：exactlyOneOnX（全场恰一人在某型席垫/坐具上）=====
+      // 板级规则（非线索卡）：参与求解器约束与最终校验；中等档签名机制
+      // （murdoku surprise-visitors「只能有一人在地毯上」）。
+      const rules = [];
+      const onKeyCount = {};
+      const seenKeys = new Set();
+      board.objects.forEach(o => {
+        if (!(o.mat || o.sittable) || seenKeys.has(o.key)) return;
+        seenKeys.add(o.key);
+        const inst = board.objects.filter(o2 => o2.key === o.key);
+        onKeyCount[o.key] = inst.reduce((acc, o2) => acc + (occupied.has(o2.cell) ? 1 : 0), 0);
+      });
+      const oneKeys = Object.keys(onKeyCount).filter(k => onKeyCount[k] === 1);
+      if (oneKeys.length) {
+        const matKey = oneKeys.find(k => board.objects.some(o => o.key === k && o.mat));
+        rules.push({ type: 'exactlyOneOnX', objKey: matKey || oneKeys[0] });
+      }
+      board.rules = rules;
+
       // ===== 线索筛选 =====
       // 规则：每人至多 2 条；同一人 2 条须不同类；每类线索全关最多 n 条（n = max(2, ⌈人数/4⌉)）
       const pool = genCluePool(board, solution, rng, diff.negWeight, diff.banRowCol, diff.rcW, diff.poolW);
@@ -2470,6 +2515,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
       }
 
       board.clues = finalClues.map(clue => ({ ...clue, text: C.clueText(clue, board) }));
+      board.rules = board.rules.map(r => ({ ...r, text: C.ruleText(r, board) }));
       delete board._roomCells;
       return board;
     }
