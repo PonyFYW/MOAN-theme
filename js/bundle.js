@@ -1396,32 +1396,33 @@ __def("src/logic/generator.js", function (require, module, exports) {
 
   const DIFFICULTY = {
     // 非常简单（对齐 murdoku 官方档，见 生成器优化方案.md）：
-    // 锚点以区域/物件/唯一性为主——行列降级（rcW 1.1 + 全关≤1条）、禁斜线/人物精确位移、
-    // 方位仅单轴 N/S（nsOnly）、同屋系降权、纯传播验收（depthTarget=0 由构建器注入）
-    veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 1.1, rowColCap: 1,
+    // 锚点以区域/物件/唯一性为主——行列降级（rcW 1.1 + 全关≤2条）、禁斜线/人物精确位移、
+    // 方位仅单轴 N/S（nsOnly）、同屋系降权、纯传播验收（depthTarget=0 由构建器注入）。
+    // rowColCap 2 = 安全阀：唯一性锚密度尚不足以完全顶替直给行列，cap=1 会导致 ~37% 生成失败
+    veryEasy: { size: 5, objectDensity: 0.10, negWeight: 0.2, label: '非常简单', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.25, notWith: 0.25, aloneWith: 0.25, withGender: 0.25, exactRow: 0, exactCol: 0, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.2, onlyOn: 1.2, onlyRoom: 0.9 } },
     // 简单（对齐 murdoku easy 档，见 murdoku_简单关卡_逐关分析.md）：
     // 行列每关≤1（rcW 1.1+cap）、对角线封禁（官方16关仅1条）、方位仅N/S；
     // 保留精确位移与链式/独处/性别条件（easy 灵魂：先落定一人、下一条线索才生效）
-    easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 1,
+    easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 简单·7×7（simple：murdoku 简单档主流盘之一；UI bandOf(7) 本就显示「简单」。
     // 参数同 easy，密度随盘微调；主题矩阵 SIZE_DIFF[7] 映射到此档。
-    // rowColCap 收回 1：唯一性锚（P1）+ 空椅补丁落地后 onlyOn/onlyRoom 锚点密度足够，不再靠直给行列兜底）
-    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 1,
+    // rowColCap 2 = 安全阀：cap=1 时线索筛选候选耗尽、无法唯一（实测失败率 ~40%）
+    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true, onlySit: 1.1, onlyOn: 1.1, onlyRoom: 0.9 } },
     // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
     // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
     // 独处/性别系升主力（官方12/15关在用）、保留精确位移、方位仅N/S
-    medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.1, rowColCap: 1,
+    medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.7, notWith: 0.5, aloneWith: 0.7, withGender: 0.5, alone: 0.7, exactRow: 0.4, exactCol: 0.4, sameDiag: 0, dir: 0.4, nsOnly: true, onlySit: 1.0, onlyOn: 1.0, onlyRoom: 0.8 } },
     // 困难（对齐 murdoku 困难档）：sameDiag 全禁（0/17）、行列≤1、独处系主力（16/17）、
     // 位移/否定是难度组成（长位移 k>1 待实现，见分析文档）
-    hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.1, rowColCap: 1,
+    hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.1, rowColCap: 2,
       poolW: { with: 0.8, notWith: 0.6, aloneWith: 0.8, withGender: 0.6, alone: 0.8, exactRow: 0.5, exactCol: 0.5, sameDiag: 0, dir: 0.5, nsOnly: true } },
     // 专家（对齐 murdoku 专家档）：难度=全局×大盘×长链，单人线索回归朴素；
     // sameDiag 显式封禁（此前 90% 局靠它撑难度，方向性错位）、独处系 0.9（官方 7/7）
-    expert: { size: 9, objectDensity: 0.18, negWeight: 1.4, label: '专家', noHint: true, rcW: 1.0, rowColCap: 1,
+    expert: { size: 9, objectDensity: 0.18, negWeight: 1.4, label: '专家', noHint: true, rcW: 1.0, rowColCap: 2,
       poolW: { with: 0.9, notWith: 0.7, aloneWith: 0.9, withGender: 0.7, alone: 0.9, exactRow: 0.6, exactCol: 0.6, sameDiag: 0, dir: 0.5, nsOnly: true } },
     master: { size: 12, objectDensity: 0.18, negWeight: 1.6, label: '大师', noHint: true, rowColCap: 1 },
     // 大师-pro：同 12×12，但线索池剔除直给行列（row/col），深度验收 ≤4（构建器可递增放宽）
@@ -2139,7 +2140,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
       // 主循环：优先给线索少的人加，直到解唯一
       let ok = false;
       for (let step = 0; step < 400; step++) {
-        const solved = Solver.solve(board, clues, { cap: 2, nodeCap: 60000 });
+        const solved = Solver.solve(board, clues, { cap: 2, nodeCap: 15000 });
         if (!solved.aborted && solved.count === 1) { ok = true; break; }
         let target = -1, idx = -1;
         // ① 严格：同 type 不重复 + 类别配额内
@@ -2304,6 +2305,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
         let cleaned = true;
         while (cleaned) {
           cleaned = false;
+          if (Date.now() - attemptStart > 3000) break;   // 等价清理是慢路径：超时即跳过
           for (const p of people) {
             const mineIdx = clues.map((c, i) => (c.p === p.id ? i : -1)).filter(i => i >= 0);
             let hit = -1;
@@ -2327,6 +2329,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
             // ② 替换：从全池找一条与 p 既有线索不等价的新线索补上
             let swapped = false;
             for (const cand of ordered) {
+              if (Date.now() - attemptStart > 3000) break;   // 替换扫描最贵：逐条设闸
               if (cand.p === undefined || cand.p === victimId) continue;
               if (clues.includes(cand)) continue;
               if (!candidateOK(cand.p, cand)) continue;
