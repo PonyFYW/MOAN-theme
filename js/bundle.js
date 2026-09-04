@@ -1912,7 +1912,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
       // 全用同一坐具类型（sitObj/onlyOn 需 ≥2 实例）。size≥8 维持「sitCellCount 把有人椅」作
       // 「坐在椅子上」锚点（困难/专家档的独特性另有机制，见 生成器优化方案 §十/§十一）。
       const sitTypes = OBJECT_TYPES.filter(t => t.sittable && !t.mat);
-      if (size < 8 && false) {   // 临时基线：关空椅补丁，测同种子失败率
+      if (size < 8) {
         const sitType = rng.pick(sitTypes);
         const emptySits = size >= 6 ? 2 : 1;                        // 空椅数
         const freeSittable = freeCells.filter(c => occupiable[c]);  // 可站空格（避开硬物件）
@@ -2139,7 +2139,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
       // 主循环：优先给线索少的人加，直到解唯一
       let ok = false;
       for (let step = 0; step < 400; step++) {
-        const solved = Solver.solve(board, clues, { cap: 2, nodeCap: 15000 });
+        const solved = Solver.solve(board, clues, { cap: 2, nodeCap: 60000 });
         if (!solved.aborted && solved.count === 1) { ok = true; break; }
         let target = -1, idx = -1;
         // ① 严格：同 type 不重复 + 类别配额内
