@@ -1341,11 +1341,19 @@ __def("src/logic/generator.js", function (require, module, exports) {
     // 保留精确位移与链式/独处/性别条件（easy 灵魂：先落定一人、下一条线索才生效）
     easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 1,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
-    medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.5,
-      poolW: { exactRow: 0.4, exactCol: 0.4, sameDiag: 0.1, dir: 0.5 } },
-    hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.2,
-      poolW: { sameDiag: 0.12, dir: 0.6 } },
-    expert: { size: 9, objectDensity: 0.18, negWeight: 1.4, label: '专家', noHint: true, rowColCap: 1 },
+    // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
+    // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
+    // 独处/性别系升主力（官方12/15关在用）、保留精确位移、方位仅N/S
+    medium: { size: 7, objectDensity: 0.14, negWeight: 0.7, label: '中等', rcW: 1.1, rowColCap: 1,
+      poolW: { with: 0.7, notWith: 0.5, aloneWith: 0.7, withGender: 0.5, alone: 0.7, exactRow: 0.4, exactCol: 0.4, sameDiag: 0, dir: 0.4, nsOnly: true } },
+    // 困难（对齐 murdoku 困难档）：sameDiag 全禁（0/17）、行列≤1、独处系主力（16/17）、
+    // 位移/否定是难度组成（长位移 k>1 待实现，见分析文档）
+    hard: { size: 8, objectDensity: 0.16, negWeight: 1.0, label: '困难', rcW: 1.1, rowColCap: 1,
+      poolW: { with: 0.8, notWith: 0.6, aloneWith: 0.8, withGender: 0.6, alone: 0.8, exactRow: 0.5, exactCol: 0.5, sameDiag: 0, dir: 0.5, nsOnly: true } },
+    // 专家（对齐 murdoku 专家档）：难度=全局×大盘×长链，单人线索回归朴素；
+    // sameDiag 显式封禁（此前 90% 局靠它撑难度，方向性错位）、独处系 0.9（官方 7/7）
+    expert: { size: 9, objectDensity: 0.18, negWeight: 1.4, label: '专家', noHint: true, rcW: 1.0, rowColCap: 1,
+      poolW: { with: 0.9, notWith: 0.7, aloneWith: 0.9, withGender: 0.7, alone: 0.9, exactRow: 0.6, exactCol: 0.6, sameDiag: 0, dir: 0.5, nsOnly: true } },
     master: { size: 12, objectDensity: 0.18, negWeight: 1.6, label: '大师', noHint: true, rowColCap: 1 },
     // 大师-pro：同 12×12，但线索池剔除直给行列（row/col），深度验收 ≤4（构建器可递增放宽）
     masterPro: { size: 12, objectDensity: 0.18, negWeight: 1.6, label: '大师-pro', banRowCol: true },
