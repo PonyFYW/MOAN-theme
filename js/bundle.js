@@ -1341,6 +1341,11 @@ __def("src/logic/generator.js", function (require, module, exports) {
     // 保留精确位移与链式/独处/性别条件（easy 灵魂：先落定一人、下一条线索才生效）
     easy: { size: 6, objectDensity: 0.12, negWeight: 0.4, label: '简单', rcW: 1.1, rowColCap: 1,
       poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
+    // 简单·7×7（simple：murdoku 简单档主流盘之一；UI bandOf(7) 本就显示「简单」。
+    // 参数同 easy，密度随盘微调；主题矩阵 SIZE_DIFF[7] 映射到此档。
+    // rowColCap 暂为 2：only 唯一性锚（P1）未落地前的过渡值，P1 落地后收回 1）
+    simple: { size: 7, objectDensity: 0.13, negWeight: 0.5, label: '简单', rcW: 1.1, rowColCap: 2,
+      poolW: { with: 0.5, notWith: 0.4, aloneWith: 0.5, withGender: 0.4, exactRow: 0.3, exactCol: 0.3, sameDiag: 0, dir: 0.3, nsOnly: true } },
     // 中等（对齐 murdoku 中等档，见 murdoku_中等关卡_逐关分析.md）：
     // 跃迁靠全局/关系链而非放大棋盘——sameDiag 全禁（官方0/15）、行列≤1、
     // 独处/性别系升主力（官方12/15关在用）、保留精确位移、方位仅N/S
@@ -1370,14 +1375,28 @@ __def("src/logic/generator.js", function (require, module, exports) {
   /** 随机生长划分房间：平均约 5-6 格/房间，限制最大尺寸避免巨型房间 */
   function genRooms(size, rng) {
     const total = size * size;
-    const target = Math.max(3, Math.min(12, Math.round(total / 6)));
-    const maxSize = Math.ceil((total / target) * 1.8);
+    // 房数按人数定（≈0.75×人数）：murdoku 房/人比 ~0.7~0.8，天然低空房率（原 total/6 公式房数≈1.5×人数，必然大量空房）
+    const target = Math.max(3, Math.min(12, Math.round(size * 0.75)));
+    const maxSize = Math.ceil((total / target) * 1.3);   // 单房上限收紧（原 1.8 会出半盘大房）
     const roomAt = new Int16Array(total).fill(-1);
 
     const seeds = rng.shuffle(Array.from({ length: total }, (_, i) => i)).slice(0, target);
     const fronts = seeds.map(s => [s]);
     seeds.forEach((s, r) => { roomAt[s] = r; });
     const sizes = seeds.map(() => 1);
+    const cellsOf = seeds.map(s => [s]);   // 各房格列表（规整化体检用）
+
+    /* 规整化约束：候选格加入后，该房紧凑度 fill ≥ 0.7 且长宽比 ≤ 2.5（原则 B3）。
+     * 生长中逐步保持 → 成房天然近矩形，不再产生蛇形/手指房。 */
+    const fillOK = (r, cell) => {
+      const cells = cellsOf[r].concat([cell]);
+      if (cells.length < 3) return true;   // 1~2 格天然紧凑
+      const rs = cells.map(c => M.row(c, size)), cs = cells.map(c => M.col(c, size));
+      const h = Math.max(...rs) - Math.min(...rs) + 1, w = Math.max(...cs) - Math.min(...cs) + 1;
+      if (cells.length / (h * w) < 0.7) return false;
+      if (Math.max(h, w) / Math.min(h, w) > 2.5) return false;
+      return true;
+    };
 
     let unassigned = total - target;
     let guard = total * 20;
@@ -1387,7 +1406,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
         if (unassigned <= 0) break;
         if (sizes[r] >= maxSize || fronts[r].length === 0) continue;
         const f = rng.pick(fronts[r]);
-        const cand = M.neighbors4(f, size).filter(c => roomAt[c] === -1);
+        const cand = M.neighbors4(f, size).filter(c => roomAt[c] === -1 && fillOK(r, c));
         if (cand.length === 0) {
           fronts[r].splice(fronts[r].indexOf(f), 1);
           continue;
@@ -1395,6 +1414,7 @@ __def("src/logic/generator.js", function (require, module, exports) {
         const cell = rng.pick(cand);
         roomAt[cell] = r;
         fronts[r].push(cell);
+        cellsOf[r].push(cell);
         sizes[r]++;
         unassigned--;
       }
@@ -1441,6 +1461,41 @@ __def("src/logic/generator.js", function (require, module, exports) {
   }
 
   /** 随机置换：第 p 个人在 (p, perm[p]) → 天然满足每行每列一人 */
+  /** 均衡分配解（原则 B2：空房率受控）。
+   * 人口按房间配额分配（R<P 时全房有人，R==P 时拆出 2人房+1空房保受害者机制），
+   * 回溯落实行列唯一。返回 null = 无可行分配（调用方重试）。 */
+  function genBalancedSolution(size, roomAt, roomCount, rng) {
+    const P = size, R = roomCount;
+    let quota;
+    if (R <= P) {
+      const base = Math.floor(P / R), extra = P % R;
+      quota = Array.from({ length: R }, (_, i) => i < extra ? base + 1 : base);
+      if (R === P) { quota[0] = 2; quota[R - 1] = 0; }   // 全 1 人时拆出 2 人房（受害者需"恰 2 人房"）
+      rng.shuffle(quota);
+    } else {
+      quota = Array.from({ length: R }, (_, i) => i < P ? 1 : 0);
+      rng.shuffle(quota);
+    }
+    const usedCol = new Array(size).fill(false);
+    const sol = new Array(size).fill(-1);
+    const bt = (r0) => {
+      if (r0 === P) return true;
+      for (const r of rng.shuffle(Array.from({ length: size - r0 }, (_, i) => r0 + i))) {
+        for (const c of rng.shuffle(Array.from({ length: size }, (_, i) => i))) {
+          if (usedCol[c]) continue;
+          const cell = r * size + c;
+          const rm = roomAt[cell];
+          if (quota[rm] <= 0) continue;
+          usedCol[c] = true; quota[rm]--; sol[r] = cell;
+          if (bt(r0 + 1)) return true;
+          usedCol[c] = false; quota[rm]++; sol[r] = -1;
+        }
+      }
+      return false;
+    };
+    return bt(0) ? sol : null;
+  }
+
   function genSolution(size, rng) {
     return rng.shuffle(Array.from({ length: size }, (_, i) => i))
       .map((col, row) => M.idx(row, col, size));
@@ -1653,7 +1708,8 @@ __def("src/logic/generator.js", function (require, module, exports) {
 
       let solution = null, victimId = -1;
       for (let t = 0; t < 200; t++) {
-        const cand = genSolution(size, rng);
+        const cand = genBalancedSolution(size, roomAt, rooms.length, rng);
+        if (!cand) continue;
         const victims = pickVictim(cand, roomAt, rooms.length);
         if (victims.length > 0) {
           solution = cand;
